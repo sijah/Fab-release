@@ -156,11 +156,31 @@ The repository is also a Claude Code plugin. Install it with:
 /plugin install fab-release@fab-release
 ```
 
-Then ask Claude to release a board, for example "make a fab release of
-board.kicad_pcb". The skill runs the command line above from the plugin's
-own copy, explains a blocked gate or a refusal, and can edit
-`<board>.release.json` for you. It needs KiCad 10, git and, for the iBOM, the
-Interactive HTML BOM plugin, as above.
+Start a new session so the plugin loads. It needs KiCad 10, git and, for the
+iBOM, the Interactive HTML BOM plugin, as above.
+
+Ask in plain words, or call the skill as
+`/fab-release:fab-release path\to\board.kicad_pcb`:
+
+- "make a fab release of path\to\board.kicad_pcb", or "release this board"
+  in the board's folder (Claude finds the `.kicad_pcb`, and asks if there
+  are several)
+- "trial release, it isn't committed yet" adds `--allow-dirty`
+- "release without tagging" adds `--no-tag`
+
+Claude runs the command line above from the plugin's own copy. If the gate
+blocks, it lists the findings and stops; it does not export around them. If
+the release is refused, it says what to fix, such as committing or setting
+the rev.
+
+Settings can be changed the same way, for example "turn off STEP and iBOM",
+"use BOM preset Production", "put releases in D:\Releases" or "make the gate
+strict". Claude edits `<board>.release.json`, the same file the dialog
+writes.
+
+Update with `/plugin marketplace update fab-release`; turn off with
+`/plugin disable fab-release@fab-release`; remove with
+`/plugin uninstall fab-release@fab-release`.
 
 ## Building the package
 
