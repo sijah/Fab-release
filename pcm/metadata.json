@@ -8,12 +8,12 @@
     "author": {
         "name": "Sijah AK",
         "contact": {
-            "web": "https://github.com/sijah/kicad-release"
+            "web": "https://github.com/sijah/Fab-release"
         }
     },
     "license": "MIT",
     "resources": {
-        "homepage": "https://github.com/sijah/kicad-release"
+        "homepage": "https://github.com/sijah/Fab-release"
     },
     "tags": ["fabrication", "release", "gerber", "bom"],
     "versions": [

@@ -52,7 +52,7 @@ If the git tag already exists, the release is made untagged and says so.
 ### Via PCM
 
 1. Download `fab-release-<version>-pcm.zip` from
-   [Releases](https://github.com/sijah/kicad-release/releases)
+   [Releases](https://github.com/sijah/Fab-release/releases)
 2. KiCad → **Plugin and Content Manager** → **Install from File…** → select the zip
 3. Restart KiCad if the toolbar button doesn't appear
 
@@ -108,8 +108,8 @@ Exit codes: 0 released, 2 gate blocked, 3 could not run, 4 refused, 5 an export 
 ## Building the package
 
 ```
-git clone https://github.com/sijah/kicad-release
-cd kicad-release
+git clone https://github.com/sijah/Fab-release
+cd Fab-release
 git clone https://github.com/danielboston38/prefab-gate
 python pcm/build_pcm.py
 python -m unittest test_release
