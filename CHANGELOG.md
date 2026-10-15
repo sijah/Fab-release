@@ -1,5 +1,12 @@
 # Changelog — Fab Release
 
+## Unreleased
+
+- Claude Code plugin: `skills/fab-release` runs a release from Claude Code
+  (`/plugin marketplace add sijah/Fab-release`).
+- prefab-gate is vendored in `prefab_gate/` with the KiCad 10 exclusions fix;
+  building no longer needs a separate clone.
+
 ## v1.0.0 (2026-10-15)
 
 First public release, for KiCad 10.0 on Windows (IPC API).

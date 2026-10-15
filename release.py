@@ -19,11 +19,8 @@ import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-# Installed as a PCM package prefab-gate ships inside it as prefab_gate/; in the repo it is
-# the cloned upstream. The repo path is the fallback so the "missing" message names it.
-GATE = next((p for p in (HERE / "prefab_gate" / "prefab_gate.py",
-                         HERE / "prefab-gate" / "scripts" / "prefab_gate.py") if p.exists()),
-            HERE / "prefab-gate" / "scripts" / "prefab_gate.py")
+# prefab-gate is vendored as prefab_gate/ (upstream scripts/ + KiCad 10 exclusions fix).
+GATE = HERE / "prefab_gate" / "prefab_gate.py"
 SCRIPTS = HERE / "scripts"
 FAB_FILES = HERE / "fab"  # sheets shipped with the tool, e.g. the impedance control sheet
 
@@ -361,8 +358,7 @@ def find_tools(ibom=True):
     locator so the gate and the release run the same KiCad. The plugins dir (iBOM) is only
     looked up when iBOM is ticked."""
     if not GATE.exists():
-        raise Stop(3, f"prefab-gate missing at {GATE.parents[1]}. Clone "
-                      "https://github.com/danielboston38/prefab-gate there.")
+        raise Stop(3, f"prefab-gate missing at {GATE.parent}; reinstall Fab Release.")
     sys.path.insert(0, str(GATE.parent))
     from gate.kicad import KicadUnavailable, locate_cli
     try:

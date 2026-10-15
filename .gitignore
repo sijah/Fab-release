@@ -1,4 +1,4 @@
-# Bundled at build time from its own clone (see README)
+# Upstream clone, if you keep one; the gate itself is vendored in prefab_gate/
 prefab-gate/
 # Build output and scratch
 dist/

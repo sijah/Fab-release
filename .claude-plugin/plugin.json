@@ -1,0 +1,10 @@
+{
+  "name": "fab-release",
+  "version": "1.0.0",
+  "description": "Makes a verified KiCad 10 manufacturing release from Claude Code: prefab-gate on a temporary copy, then Gerbers, drill, stackup, position, BOM, iBOM, test points, PDFs, STEP and renders in a dated folder, zipped and git-tagged. Windows only.",
+  "author": { "name": "Sijah AK" },
+  "homepage": "https://github.com/sijah/Fab-release",
+  "repository": "https://github.com/sijah/Fab-release",
+  "license": "MIT",
+  "keywords": ["kicad", "pcb", "fabrication", "release", "gerber", "bom"]
+}

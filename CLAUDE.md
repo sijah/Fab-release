@@ -18,7 +18,8 @@ customer data.
   kipy) — never SWIG `pcbnew.ActionPlugin`. Build: `python pcm/build_pcm.py`,
   then KiCad → Plugin and Content Manager → Install from File →
   `dist\fab-release-<ver>-pcm.zip`. Bump `version` in `pcm/metadata.json`
-  for every package you hand out. The build also writes
+  for every package you hand out, and the same
+  `version` in `.claude-plugin/plugin.json` + `marketplace.json`. The build also writes
   `dist/kicad-submission/` for KiCad's add-on index.
 - Per-board settings: `<board>.release.json` beside the board, written by the
   button's dialog, read by the CLI too; never counts as uncommitted; recorded in
@@ -36,13 +37,15 @@ customer data.
 
 ## What's here
 
-- `prefab-gate/` — upstream gate (github.com/danielboston38/prefab-gate), its
-  own git repo, gitignored here. Local branch `kicad10-excluded-flag` fixes
-  KiCad 10 DRC exclusions (`"excluded": true`) being treated as blocking — the
-  PCM build bundles this clone, so build from that branch until it is merged
-  upstream. The same fix is `pcm/prefab-gate-kicad10-excluded.patch` (plain
-  diff, no author line) for anyone building from upstream; see README.
-  Run: `python prefab-gate/scripts/prefab_gate.py check|package <board>.kicad_pcb`.
+- `prefab_gate/` — vendored upstream gate (github.com/danielboston38/prefab-gate
+  `scripts/`, MIT) with `pcm/prefab-gate-kicad10-excluded.patch` applied: KiCad 10
+  DRC exclusions (`"excluded": true`) must not block. Used by release.py, the PCM
+  build and the Claude plugin. Swap back to upstream once that fix is merged.
+  A local clone in gitignored `prefab-gate/` is optional (for upstreaming only).
+  Run: `python prefab_gate/prefab_gate.py check|package <board>.kicad_pcb`.
+- `.claude-plugin/` + `skills/fab-release/SKILL.md` — Claude Code plugin and
+  marketplace (repo root); the skill runs `release.py` via `${CLAUDE_PLUGIN_ROOT}`.
+  Versions must equal `pcm/metadata.json` (tested).
 - `scripts/fab_exports.py` — stdlib, reads the `.kicad_pcb`/`.kicad_pro` text
   (no pcbnew): `python scripts/fab_exports.py components|testpoints|stackup
   <board.kicad_pcb> <out>`. Replaces older SWIG fab-data scripts and the

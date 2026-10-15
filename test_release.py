@@ -854,8 +854,6 @@ class Release(TmpCase):
             self.assertEqual(release.main([str(self.pcb)]), 2)
 
 
-@unittest.skipUnless((release.HERE / "prefab-gate" / "scripts" / "prefab_gate.py").exists(),
-                     "prefab-gate not cloned; the package bundles it")
 class Pcm(TmpCase):
     def setUp(self):
         super().setUp()
@@ -932,6 +930,15 @@ class Pcm(TmpCase):
                            cwd=dest / "plugins", capture_output=True, text=True, check=True)
         self.assertEqual(Path(r.stdout.strip()),
                          (dest / "plugins" / "prefab_gate" / "prefab_gate.py").resolve())
+
+
+class ClaudePlugin(unittest.TestCase):
+    def test_versions_match_pcm(self):
+        load = lambda p: json.loads((release.HERE / p).read_text(encoding="utf-8"))
+        want = load("pcm/metadata.json")["versions"][0]["version"]
+        self.assertEqual(load(".claude-plugin/plugin.json")["version"], want)
+        self.assertEqual(load(".claude-plugin/marketplace.json")["plugins"][0]["version"], want)
+        self.assertTrue((release.HERE / "skills" / "fab-release" / "SKILL.md").exists())
 
 
 sys.path.insert(0, str(release.SCRIPTS))

@@ -5,7 +5,7 @@
 
 Layout per KiCad PCM: metadata.json at the root, code under plugins/, 64x64
 resources/icon.png. plugins/ gets the toolbar action, release.py, scripts/ and
-prefab-gate's scripts/ as prefab_gate/, so the installed package needs nothing
+the vendored prefab_gate/, so the installed package needs nothing
 from this repo. To update the team: bump "version" in metadata.json, rebuild,
 reinstall from file.
 
@@ -16,7 +16,6 @@ v<version>; download_url assumes that.
 import hashlib
 import json
 import struct
-import sys
 import zipfile
 import zlib
 from pathlib import Path
@@ -81,10 +80,6 @@ def _files(root):
 def build(out_dir, root=ROOT):
     """Write the archive into out_dir and return its path."""
     meta = json.loads((root / "pcm" / "metadata.json").read_text(encoding="utf-8"))
-    gate = root / "prefab-gate" / "scripts"
-    if not (gate / "prefab_gate.py").exists():
-        sys.exit(f"prefab-gate missing at {gate.parent}. Clone "
-                 "https://github.com/danielboston38/prefab-gate there first.")
     archive = Path(out_dir) / f"fab-release-{meta['versions'][0]['version']}-pcm.zip"
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("metadata.json", json.dumps(meta, indent=4))
@@ -96,10 +91,9 @@ def build(out_dir, root=ROOT):
         z.writestr("plugins/icon64.png", png(64))  # dialogs' window icon
         z.write(root / "release.py", "plugins/release.py")
         for src, dest in ((root / "pcm" / "plugin", "plugins"), (root / "scripts", "plugins/scripts"),
-                          (root / "fab", "plugins/fab"), (gate, "plugins/prefab_gate")):
+                          (root / "fab", "plugins/fab"), (root / "prefab_gate", "plugins/prefab_gate")):
             for p in _files(src):
                 z.write(p, f"{dest}/{p.relative_to(src).as_posix()}")
-        z.write(root / "prefab-gate" / "LICENSE", "plugins/prefab_gate/LICENSE")
         z.write(root / "LICENSE", "plugins/LICENSE")
     return archive
 

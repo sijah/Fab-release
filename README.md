@@ -147,21 +147,35 @@ python release.py path\to\board.kicad_pcb [--allow-dirty] [--no-tag]
 Exit codes: 0 released, 2 blocked by the gate, 3 could not run, 4 refused,
 5 an export failed.
 
+### Claude Code
+
+The repository is also a Claude Code plugin. Install it with:
+
+```
+/plugin marketplace add sijah/Fab-release
+/plugin install fab-release@fab-release
+```
+
+Then ask Claude to release a board, for example "make a fab release of
+board.kicad_pcb". The skill runs the command line above from the plugin's
+own copy, explains a blocked gate or a refusal, and can edit
+`<board>.release.json` for you. It needs KiCad 10, git and, for the iBOM, the
+Interactive HTML BOM plugin, as above.
+
 ## Building the package
 
 ```
 git clone https://github.com/sijah/Fab-release
 cd Fab-release
-git clone https://github.com/danielboston38/prefab-gate
-git -C prefab-gate apply ../pcm/prefab-gate-kicad10-excluded.patch
 python pcm/build_pcm.py
 python -m unittest test_release
 ```
 
-The patch makes prefab-gate treat KiCad 10 DRC exclusions as exclusions.
-KiCad 10 marks them with `"excluded": true` instead of the severity
-`exclusion` that earlier versions used. Skip it once prefab-gate includes the
-change.
+prefab-gate is included in `prefab_gate/`: upstream's `scripts/` with
+`pcm/prefab-gate-kicad10-excluded.patch` applied. The patch makes it treat
+KiCad 10 DRC exclusions (`"excluded": true`) as exclusions; earlier versions
+used the severity `exclusion`. Replace the folder with upstream's `scripts/`
+once prefab-gate includes the change.
 
 `build_pcm.py` writes `dist/fab-release-<version>-pcm.zip`. For a submission
 to KiCad's add-on repository it also writes
@@ -172,7 +186,7 @@ distribute.
 ## Credits
 
 - [prefab-gate](https://github.com/danielboston38/prefab-gate) by Mark Dymek,
-  MIT license, included in the package
+  MIT license, included in `prefab_gate/` and the package
 - [Interactive HTML BOM](https://github.com/openscopeproject/InteractiveHtmlBom)
   by openscopeproject, used when installed
 
