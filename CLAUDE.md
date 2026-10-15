@@ -40,7 +40,8 @@ customer data.
   own git repo, gitignored here. Local branch `kicad10-excluded-flag` fixes
   KiCad 10 DRC exclusions (`"excluded": true`) being treated as blocking — the
   PCM build bundles this clone, so build from that branch until it is merged
-  upstream.
+  upstream. The same fix is `pcm/prefab-gate-kicad10-excluded.patch` (plain
+  diff, no author line) for anyone building from upstream; see README.
   Run: `python prefab-gate/scripts/prefab_gate.py check|package <board>.kicad_pcb`.
 - `scripts/fab_exports.py` — stdlib, reads the `.kicad_pcb`/`.kicad_pro` text
   (no pcbnew): `python scripts/fab_exports.py components|testpoints|stackup

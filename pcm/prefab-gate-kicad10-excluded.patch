@@ -1,0 +1,35 @@
+diff --git a/scripts/gate/classify.py b/scripts/gate/classify.py
+index 06e5e3a..06ba729 100644
+--- a/scripts/gate/classify.py
++++ b/scripts/gate/classify.py
+@@ -143,7 +143,9 @@ def classify(drc: dict, strict: bool = False, parity: Parity = None) -> Verdict:
+ 
+     for v in drc.get("violations", []):
+         severity = v.get("severity", "")
+-        if severity == "exclusion":
++        # KiCad <=9 reports severity "exclusion"; KiCad 10 keeps the rule's
++        # severity and adds "excluded": true.
++        if severity == "exclusion" or v.get("excluded") is True:
+             # Excluded in the GUI: counted, not judged. The count is the point —
+             # it is the difference between "nothing was wrong" and "you told me
+             # not to look".
+diff --git a/tests/test_classify_drc.py b/tests/test_classify_drc.py
+index 4e63d42..06d541b 100644
+--- a/tests/test_classify_drc.py
++++ b/tests/test_classify_drc.py
+@@ -32,6 +32,15 @@ class TestClassifyViolations(unittest.TestCase):
+         v = classify(drc(violations=[violation("exclusion"), violation("exclusion")]))
+         self.assertEqual(v.excluded, 2)
+ 
++    def test_kicad10_excluded_flag_is_an_exclusion(self):
++        """KiCad 10 keeps the rule's severity and marks the exclusion with "excluded": true."""
++        excluded = dict(violation("error"), excluded=True)
++        v = classify(drc(violations=[excluded, dict(violation("warning"), excluded=True)]))
++        self.assertEqual((len(v.blocking), len(v.cosmetic), v.excluded), (0, 0, 2))
++        self.assertTrue(v.passed)
++        v = classify(drc(violations=[excluded]), strict=True)
++        self.assertEqual(len(v.blocking), 0)
++
+     def test_checks_disabled_in_the_project_file_reach_the_verdict(self):
+         d = drc()
+         d["ignored_checks"] = [{"key": "missing_courtyard",
