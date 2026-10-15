@@ -45,7 +45,9 @@ customer data.
   Run: `python prefab_gate/prefab_gate.py check|package <board>.kicad_pcb`.
 - `.claude-plugin/` + `skills/fab-release/SKILL.md` — Claude Code plugin and
   marketplace (repo root); the skill runs `release.py` via `${CLAUDE_PLUGIN_ROOT}`.
-  Versions must equal `pcm/metadata.json` (tested).
+  Versions must equal `pcm/metadata.json` (tested). `skills/schematic-review`
+  runs `scripts/sch_facts.py <board> <out dir>` (kicad-cli netlist + ERC ->
+  facts.json, schematic.pdf, page PNGs via optional PyMuPDF); advice only.
 - `scripts/fab_exports.py` — stdlib, reads the `.kicad_pcb`/`.kicad_pro` text
   (no pcbnew): `python scripts/fab_exports.py components|testpoints|stackup
   <board.kicad_pcb> <out>`. Replaces older SWIG fab-data scripts and the

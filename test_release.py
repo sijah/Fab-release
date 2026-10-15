@@ -943,6 +943,56 @@ class ClaudePlugin(unittest.TestCase):
 
 sys.path.insert(0, str(release.SCRIPTS))
 import fab_exports  # noqa: E402
+import sch_facts  # noqa: E402
+
+SCH_NETLIST = '''<export version="E"><design><source>x.kicad_sch</source><tool>Eeschema 10.0.7</tool>
+<sheet number="1" name="/"><title_block><title>T</title><company>C</company><rev>1.2</rev><date>2026-10-15</date><source>x.kicad_sch</source></title_block></sheet>
+<sheet number="2" name="/Power/"><title_block><title>T</title><company>C</company><rev>1.1</rev><date>2026-10-15</date><source>p.kicad_sch</source></title_block></sheet>
+</design><components>
+<comp ref="U1"><value>LDO</value><footprint>lib:SOT</footprint><fields><field name="MPN">TLV1</field><field name="Datasheet">http://d</field></fields><sheetpath names="/Power/"/></comp>
+<comp ref="R1"><value>10k</value><footprint>lib:R</footprint><fields><field name="MPN"/></fields><sheetpath names="/"/></comp>
+<comp ref="R2"><value>10k</value><footprint>lib:R</footprint><property name="dnp"/><sheetpath names="/"/></comp>
+</components><nets>
+<net code="1" name="GND"><node ref="U1" pin="2" pinfunction="GND" pintype="power_in"/><node ref="R1" pin="2" pintype="passive"/></net>
+<net code="2" name="/EN"><node ref="U1" pin="3" pinfunction="EN" pintype="input+no_connect"/><node ref="R1" pin="1" pintype="passive"/></net>
+<net code="3" name="/TP"><node ref="R2" pin="1" pintype="passive"/></net>
+<net code="6" name="unconnected-(U1-VDD-Pad6)"><node ref="U1" pin="6" pinfunction="VDD" pintype="power_in+no_connect"/></net>
+<net code="4" name="unconnected-(U1-NC-Pad4)"><node ref="U1" pin="4" pinfunction="NC" pintype="no_connect"/></net>
+<net code="5" name="unconnected-(U1-FB-Pad5)"><node ref="U1" pin="5" pinfunction="FB" pintype="input"/></net>
+</nets></export>'''
+
+SCH_ERC = {"sheets": [{"path": "/", "violations": [
+    {"severity": "warning", "type": "endpoint_off_grid", "description": "off grid", "items": []},
+    {"severity": "error", "type": "power_pin_not_driven", "description": "not driven",
+     "items": [{"description": "Symbol U1 Pin 2"}]},
+    {"severity": "error", "type": "label_dangling", "excluded": True, "description": "x", "items": []}]}]}
+
+
+class SchFacts(unittest.TestCase):
+    def setUp(self):
+        self.f = sch_facts.facts(SCH_NETLIST, SCH_ERC)
+
+    def test_flags(self):
+        fl = self.f["flags"]
+        self.assertEqual(fl["title_block"], ["/Power/: rev '1.1' differs from root '1.2'"])
+        self.assertEqual(fl["floating_pins"], ["U1.5 FB"])  # U1.4 has its no-connect flag
+        self.assertEqual(fl["no_connect_flag_on_connected_pin"], ["U1.3 EN on /EN"])
+        self.assertEqual(fl["single_pin_nets"], ["/TP"])
+        self.assertEqual(fl["no_connect_flag_on_power_pin"], ["U1.6 VDD"])
+        self.assertEqual(fl["fitted_parts_without_mpn"], ["R1"])  # R2 is DNP
+
+    def test_parts_nets_erc(self):
+        u1 = self.f["parts"]["U1"]
+        self.assertEqual((u1["datasheet"], u1["fields"], u1["sheet"]), ("http://d", {"MPN": "TLV1"}, "/Power/"))
+        self.assertEqual(u1["pins"]["2"], ["GND", "GND", "power_in"])
+        self.assertTrue(self.f["parts"]["R2"]["dnp"])
+        self.assertEqual(self.f["nets"]["/EN"], ["U1.3 EN", "R1.1"])
+        self.assertEqual(self.f["power_nets"], ["GND"])
+        erc = self.f["erc"]
+        self.assertEqual(erc["excluded"], 1)
+        self.assertEqual(erc["counts"], {"warning:endpoint_off_grid": 1, "error:power_pin_not_driven": 1})
+        self.assertEqual([v["type"] for v in erc["violations"]], ["power_pin_not_driven"])
+        self.assertEqual(json.loads(sch_facts.dump(self.f)), self.f)
 
 FAB_PCB = r'''(kicad_pcb (version 20250114) (generator "pcbnew")
   (general (thickness 1.6))

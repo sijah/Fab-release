@@ -4,6 +4,8 @@
 
 - Claude Code plugin: `skills/fab-release` runs a release from Claude Code
   (`/plugin marketplace add sijah/Fab-release`).
+- Schematic review skill (`skills/schematic-review`) with
+  `scripts/sch_facts.py`: netlist + ERC summary for a datasheet-based review.
 - prefab-gate is vendored in `prefab_gate/` with the KiCad 10 exclusions fix;
   building no longer needs a separate clone.
 

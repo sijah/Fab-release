@@ -178,6 +178,15 @@ Settings can be changed the same way, for example "turn off STEP and iBOM",
 strict". Claude edits `<board>.release.json`, the same file the dialog
 writes.
 
+The plugin also reviews schematics: ask "review the schematic of
+path	ooard.kicad_pcb". `scripts/sch_facts.py` turns the kicad-cli netlist
+and ERC into one summary (every part, pin and net, plus mechanical red flags
+such as floating pins), and Claude checks each IC against its datasheet:
+power pins, decoupling, straps and pull-ups, voltage levels between rails,
+connectors and ESD. It writes `<board>.schematic-review.md` with findings
+ranked likely bug, check and nit. The review is advice only: it does not edit
+the schematic or block a release.
+
 Update with `/plugin marketplace update fab-release`; turn off with
 `/plugin disable fab-release@fab-release`; remove with
 `/plugin uninstall fab-release@fab-release`.
