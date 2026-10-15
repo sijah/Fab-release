@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="256" height="256">
-  <title>Aptener Release</title>
+  <title>Fab Release</title>
   <!-- Light theme; same geometry as png() in build_pcm.py. KiCad icon palette: PCB Dark Green
        soldermask, Gold copper, Accent Grey via holes. -->
   <rect x="1" y="1" width="22" height="22" rx="4" fill="#006400"/>

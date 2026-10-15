@@ -17,7 +17,7 @@ customer data.
 - Button: KiCad 10 **IPC API** plugin (`pcm/plugin/plugin.json`, `ipc_entry.py`,
   kipy) — never SWIG `pcbnew.ActionPlugin`. Build: `python pcm/build_pcm.py`,
   then KiCad → Plugin and Content Manager → Install from File →
-  `dist\aptener-release-<ver>-pcm.zip`. Bump `version` in `pcm/metadata.json`
+  `dist\fab-release-<ver>-pcm.zip`. Bump `version` in `pcm/metadata.json`
   for every package you hand out. The build also writes
   `dist/kicad-submission/` for KiCad's add-on index.
 - Per-board settings: `<board>.release.json` beside the board, written by the

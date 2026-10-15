@@ -1,7 +1,7 @@
 {
     "$schema": "https://go.kicad.org/api/schemas/v1",
-    "identifier": "com.aptener.kicad-release",
-    "name": "Aptener Release",
+    "identifier": "com.github.sijah.fab-release",
+    "name": "Fab Release",
     "description": "prefab-gate check, then a full fab release of the open board.",
     "runtime": {
         "type": "python"
@@ -9,7 +9,7 @@
     "actions": [
         {
             "identifier": "release",
-            "name": "Aptener Release",
+            "name": "Fab Release",
             "description": "Choose outputs, run prefab-gate on a copy of the saved board, then build the release folder and zip.",
             "show-button": true,
             "scopes": [

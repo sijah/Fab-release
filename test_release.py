@@ -1,5 +1,5 @@
 """Stdlib tests for release.py. No KiCad needed: git, prefab-gate, kicad-cli, the
-Aptener scripts and the plugins are replaced by FakeTools where they would run."""
+The fab-data script and the plugins are replaced by FakeTools where they would run."""
 import datetime
 import hashlib
 import json
@@ -82,7 +82,7 @@ IBOM_HTML = "ibom_BRD_2026-10-14_15-49-09.html"
 
 
 class FakeTools:
-    """Stands in for subprocess.run. Answers git, prefab-gate, kicad-cli, the Aptener scripts and
+    """Stands in for subprocess.run. Answers git, prefab-gate, kicad-cli, the fab-data script and
     the plugins, writing every file the real tool would so release.py's output checks see them.
 
     fail:   substring of a command line that should exit 1
@@ -371,9 +371,9 @@ class Plugins(TmpCase):
 
     def test_installed_beside_the_other_plugins(self):
         plugins = self.tmp / "plugins"
-        self.make(plugins, release.IBOM, "com_aptener_kicad-release")
+        self.make(plugins, release.IBOM, "com_github_sijah_fab-release")
         got = release.plugins_dir(env={}, documents=lambda: self.tmp / "nowhere",
-                                  here=plugins / "com_aptener_kicad-release")
+                                  here=plugins / "com_github_sijah_fab-release")
         self.assertEqual(got, plugins)
 
     def test_redirected_documents(self):
@@ -903,7 +903,7 @@ class Pcm(TmpCase):
     def test_metadata_is_a_kicad10_plugin(self):
         m = json.loads(self.z.read("metadata.json"))
         self.assertEqual((m["identifier"], m["type"], m["versions"][0]["kicad_version"]),
-                         ("com.aptener.kicad-release", "plugin", "10.0"))
+                         ("com.github.sijah.fab-release", "plugin", "10.0"))
         for key in ("name", "description", "description_full", "author", "license", "resources"):
             self.assertIn(key, m)
 
@@ -926,7 +926,7 @@ class Pcm(TmpCase):
         self.assertEqual((folder / "icon.png").read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
 
     def test_installed_release_uses_bundled_gate(self):
-        dest = self.tmp / "com_aptener_kicad-release"
+        dest = self.tmp / "com_github_sijah_fab-release"
         self.z.extractall(dest)
         r = subprocess.run([sys.executable, "-c", "import release; print(release.GATE)"],
                            cwd=dest / "plugins", capture_output=True, text=True, check=True)

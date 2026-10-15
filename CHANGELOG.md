@@ -1,4 +1,4 @@
-# Changelog — Aptener Release
+# Changelog — Fab Release
 
 ## v1.0.0 (2026-10-15)
 

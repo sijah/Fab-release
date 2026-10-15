@@ -1,6 +1,6 @@
 <img src="pcm/logo.svg" width="96" alt="">
 
-# Aptener Release
+# Fab Release
 
 A KiCad 10 plugin that turns the board you have open into a complete, checked
 manufacturing release with one button.
@@ -51,7 +51,7 @@ If the git tag already exists, the release is made untagged and says so.
 
 ### Via PCM
 
-1. Download `aptener-release-<version>-pcm.zip` from
+1. Download `fab-release-<version>-pcm.zip` from
    [Releases](https://github.com/sijah/kicad-release/releases)
 2. KiCad → **Plugin and Content Manager** → **Install from File…** → select the zip
 3. Restart KiCad if the toolbar button doesn't appear
@@ -70,7 +70,7 @@ KiCad creates a Python environment for the plugin and installs
 ## Usage
 
 1. Commit your project, then open the board in the PCB Editor
-2. Click the **Aptener Release** toolbar button
+2. Click the **Fab Release** toolbar button
 3. Check the release name and outputs, then **Release**
 
 Progress is shown in the dialog; **Cancel** stops it and publishes nothing.
@@ -115,7 +115,7 @@ python pcm/build_pcm.py
 python -m unittest test_release
 ```
 
-`build_pcm.py` writes `dist/aptener-release-<version>-pcm.zip` and, for a
+`build_pcm.py` writes `dist/fab-release-<version>-pcm.zip` and, for a
 submission to KiCad's add-on repository, `dist/kicad-submission/` with the
 package's `metadata.json` (download URL, SHA-256 and sizes filled in) and
 `icon.png`. Bump `version` in `pcm/metadata.json` for every package you hand out.

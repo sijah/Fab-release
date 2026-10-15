@@ -147,7 +147,7 @@ def release_name(board, slug, day, fmt=NAME):
 OUTPUTS = {
     "gerber": "Gerber + drill zip, PCB stackup",
     "position": "Position file (POS)",
-    "component_data": "Component data (Aptener)",
+    "component_data": "Component data CSV",
     "testpoints": "Test points",
     "bom": "BOM CSV",
     "ibom": "Interactive BOM (iBOM)",
@@ -377,7 +377,7 @@ def find_tools(ibom=True):
 
 def step(label, cmd, expect=()):
     """Run one command. It failed if it exits non-zero OR leaves an expected file missing:
-    kicad-cli and the Aptener scripts can both exit 0 having written nothing."""
+    kicad-cli and the fab-data script can both exit 0 having written nothing."""
     print(f"  {label}", flush=True)
     r = sh(cmd)
     missing = [str(p) for p in expect if not Path(p).exists()]
@@ -728,7 +728,7 @@ class _Args(argparse.ArgumentParser):
 
 def main(argv=None):
     ap = _Args(prog="release.py",
-               description="One-click KiCad 10 release (prefab-gate + kicad-cli + Aptener scripts).")
+               description="One-click KiCad 10 release (prefab-gate + kicad-cli + fab-data script).")
     ap.add_argument("board", nargs="?", help="path to <board>.kicad_pcb")
     ap.add_argument("--allow-dirty", action="store_true",
                     help="trial run: allow uncommitted changes or no git repo; never tags")

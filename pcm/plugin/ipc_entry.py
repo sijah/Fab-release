@@ -1,4 +1,4 @@
-"""Aptener Release toolbar button: KiCad 10 IPC API plugin (see plugin.json).
+"""Fab Release toolbar button: KiCad 10 IPC API plugin (see plugin.json).
 
 KiCad starts this script in its own Python process with KICAD_API_SOCKET and
 KICAD_API_TOKEN set; kipy.KiCad() uses them to ask the running PCB editor which
@@ -26,8 +26,8 @@ from release import (DEFAULTS, FAB, GROUPS, OUTPUTS, VERSION, Stop, board_rev,  
                      git, heads_up, tag_name, unplotted_layers)
 
 RELEASE = Path(__file__).with_name("release.py")
-TITLE = "Aptener Release"
-APP_ID = "com.aptener.kicad-release"
+TITLE = "Fab Release"
+APP_ID = "com.github.sijah.fab-release"
 ICON = Path(__file__).with_name("icon64.png")
 THEMES = ("System", "Light", "Dark")  # names match wx.App.Appearance members (wxPython 4.3+)
 
@@ -92,7 +92,7 @@ def main():
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
     app = wx.App(False)
     # The theme must be set before the first window; wxPython < 4.3 cannot, so no selector.
-    config, theme = wx.Config("AptenerRelease"), None
+    config, theme = wx.Config("FabRelease"), None
     if hasattr(app, "SetAppearance"):
         theme = config.Read("theme", "System")
         theme = theme if theme in THEMES else "System"

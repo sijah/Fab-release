@@ -1,6 +1,6 @@
 """Build the KiCad PCM archive.
 
-    python pcm/build_pcm.py   ->  dist/aptener-release-<version>-pcm.zip
+    python pcm/build_pcm.py   ->  dist/fab-release-<version>-pcm.zip
     Install: KiCad > Plugin and Content Manager > Install from File...
 
 Layout per KiCad PCM: metadata.json at the root, code under plugins/, 64x64
@@ -85,7 +85,7 @@ def build(out_dir, root=ROOT):
     if not (gate / "prefab_gate.py").exists():
         sys.exit(f"prefab-gate missing at {gate.parent}. Clone "
                  "https://github.com/danielboston38/prefab-gate there first.")
-    archive = Path(out_dir) / f"aptener-release-{meta['versions'][0]['version']}-pcm.zip"
+    archive = Path(out_dir) / f"fab-release-{meta['versions'][0]['version']}-pcm.zip"
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("metadata.json", json.dumps(meta, indent=4))
         z.writestr("plugins/VERSION", meta["versions"][0]["version"])  # dialog title, manifest
