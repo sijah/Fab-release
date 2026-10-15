@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="256" height="256">
+  <title>Aptener Release</title>
+  <!-- Light theme; same geometry as png() in build_pcm.py. KiCad icon palette: PCB Dark Green
+       soldermask, Gold copper, Accent Grey via holes. -->
+  <rect x="1" y="1" width="22" height="22" rx="4" fill="#006400"/>
+  <polyline points="6.5,12.5 10.5,16.5 17.5,9.5" fill="none" stroke="#F29100" stroke-width="3"
+            stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="6.5" cy="12.5" r="2.5" fill="#F29100"/>
+  <circle cx="17.5" cy="9.5" r="2.5" fill="#F29100"/>
+  <circle cx="6.5" cy="12.5" r="1" fill="#B9B9B9"/>
+  <circle cx="17.5" cy="9.5" r="1" fill="#B9B9B9"/>
+</svg>

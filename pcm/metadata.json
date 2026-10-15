@@ -1,0 +1,28 @@
+{
+    "$schema": "https://go.kicad.org/pcm/schemas/v2",
+    "name": "Aptener Release",
+    "description": "One-click verified board release: prefab-gate, fab outputs, iBOM, test points. KiCad 10 (IPC API).",
+    "description_full": "KiCad 10.0 IPC API plugin that adds an Aptener Release button to the PCB editor toolbar. It checks the committed board with prefab-gate on a temporary copy (your files are never written), then creates Manufacturing/<board>_<rev>_<DDMMYY>/ beside the board (1_Fabrication, 2_Assembly, 3_Test, 4_Documentation): Gerber + drill zip, PCB stackup, position file, component data, test points, BOM, iBOM, schematic and assembly PDFs, STEP, top/bottom renders and a manifest, plus a zip of it all, and tags the git commit. It refuses boards with uncommitted changes or an empty rev.\n\nRequires Preferences → Plugins → Enable KiCad API, git on PATH and the Interactive HTML BOM plugin from this Plugin and Content Manager. Test points are pads with Fabrication property \"Test point pad\".",
+    "identifier": "com.aptener.kicad-release",
+    "type": "plugin",
+    "author": {
+        "name": "Sijah AK",
+        "contact": {
+            "web": "https://github.com/sijah/kicad-release"
+        }
+    },
+    "license": "MIT",
+    "resources": {
+        "homepage": "https://github.com/sijah/kicad-release"
+    },
+    "tags": ["fabrication", "release", "gerber", "bom"],
+    "versions": [
+        {
+            "version": "1.0.0",
+            "status": "stable",
+            "kicad_version": "10.0",
+            "runtime": "ipc",
+            "platforms": ["windows"]
+        }
+    ]
+}
