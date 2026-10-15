@@ -90,6 +90,8 @@ def main():
     if sys.platform == "win32":  # own taskbar entry instead of pythonw.exe
         import ctypes
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
+        # Crisp text at 125%/150% scaling: without this Windows bitmap-stretches the dialog.
+        ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))  # per-monitor v2
     app = wx.App(False)
     # The theme must be set before the first window; wxPython < 4.3 cannot, so no selector.
     config, theme = wx.Config("FabRelease"), None
