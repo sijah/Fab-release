@@ -1,4 +1,4 @@
-# KiCad_Release
+# Fab Release
 
 One-click KiCad 10 release tool: prefab-gate check → kicad-cli exports → fab
 data (stackup, component data, test points), iBOM →

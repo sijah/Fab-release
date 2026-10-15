@@ -679,7 +679,7 @@ def release(pcb, allow_dirty=False, tag=True, today=None):
         ignore.write_text("*\n")
     shutil.rmtree(partial, ignore_errors=True)  # left by a crashed run
     zip_partial.unlink(missing_ok=True)
-    with tempfile.TemporaryDirectory(prefix="kicad_release_", ignore_cleanup_errors=True) as tmp:
+    with tempfile.TemporaryDirectory(prefix="fab_release_", ignore_cleanup_errors=True) as tmp:
         st = Path(tmp)
         stage(project, st)
         verdict = run_gate(st / pcb.name, cli, cfg["gate"])

@@ -362,7 +362,7 @@ class Plugins(TmpCase):
 
     def lookup(self, env=None, docs="nowhere"):
         return release.plugins_dir(env=env or {}, documents=lambda: self.tmp / docs,
-                                   here=self.tmp / "repo" / "KiCad_Release")
+                                   here=self.tmp / "repo" / "fab-release")
 
     def test_env_override(self):
         self.make(self.tmp / "third" / "plugins", release.IBOM)
