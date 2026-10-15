@@ -217,6 +217,16 @@ def grey(ctrl):
     return ctrl
 
 
+def inputs(win):
+    """The controls under win, not labels or containers: a disabled label is drawn etched
+    (a white copy 1 px off), which reads as haloed text in dark mode."""
+    for w in win.GetChildren():
+        if isinstance(w, (wx.Panel, wx.Notebook, wx.StaticBox)):
+            yield from inputs(w)
+        elif not isinstance(w, (wx.StaticText, wx.Gauge)):
+            yield w
+
+
 class SettingsDialog(wx.Dialog):
     """What this release makes and where it goes first; the once-per-board settings folded
     away. Saved per board in <board>.release.json (commit it to share)."""
@@ -417,8 +427,8 @@ class SettingsDialog(wx.Dialog):
         cfg = self.config()
         save_config(self.path.parent, self.board, cfg)
         self.busy, self.started = True, time.monotonic()
-        for w in self.GetChildren():  # only Cancel stays live while it runs
-            w.Enable(w in (self.cancel_button, self.gauge, self.status))
+        for w in inputs(self):  # only Cancel stays live while it runs
+            w.Enable(w is self.cancel_button)
         self.gauge.Show()
         self.status.Show()
         self.Fit()
