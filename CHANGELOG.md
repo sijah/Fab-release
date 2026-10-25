@@ -4,7 +4,16 @@
 
 - Fix: release no longer fails with "gerbers failed ... missing -F_Cu.gbr" when File > Plot
   uses Protel filename extensions (`.gtl`, `.gbl`...). The dialog now warns about it
-  and proceeds on OK.
+  and proceeds on OK. It also warns when the board has no stackup set.
+- Clear reasons when a release cannot run or finish: program not found (git, kicad-cli),
+  a hung step (30 min timeout), wrong KiCad version, git "dubious ownership", locked or
+  read-only output folder (the earlier release is no longer binned before that is
+  checked), gate reasons and a capped item list, silent kills, errors inside the dialog,
+  missing `.kicad_pro`, board name with a space, revs git cannot tag.
+- A failed Claude review no longer cancels the release (advice only, as the dialog says).
+- Fix: no false "plated drill missing" on SMD-only boards; the position file uses the
+  Gerber origin only when File > Plot does; UTF-8 output so non-ASCII paths do not crash.
+- Dialog warns when the board has no test-point pads while Test points is ticked.
 
 ## v1.2.0 (2026-10-16)
 

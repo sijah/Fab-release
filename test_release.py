@@ -194,8 +194,13 @@ class Gerbers(TmpCase):
         fab = self.tmp / "fab"
         write_gerbers(fab, "B", 6)
         with self.assertRaises(Stop) as cm:
-            release.check_gerbers(fab, SIX)
+            release.check_gerbers(fab, SIX + "(via (at 0 0))")
         self.assertIn("plated drill", str(cm.exception))
+
+    def test_smd_only_board_needs_no_plated_drill(self):
+        fab = self.tmp / "fab"
+        write_gerbers(fab, "B", 6)
+        release.check_gerbers(fab, SIX)
 
     def test_x1_comment_attributes_count(self):
         fab = self.tmp / "fab"
@@ -486,11 +491,13 @@ class Build(TmpCase):
         iso = dict((label, cmd) for _, label, cmd, _ in cmds)["render isometric"]
         self.assertEqual(iso[iso.index("--rotate") + 1], "-45,0,45")
 
-    def test_position_file_uses_drill_origin(self):
-        # A hand-made POS is relative to the drill/place origin, like the test points
-        pos = dict((label, cmd) for _, label, cmd, _ in
-                   release.export_commands(Path("kicad-cli"), self.tmp, "BRD"))["position"]
-        self.assertIn("--use-drill-file-origin", pos)
+    def test_position_file_origin_follows_gerber_plot_setting(self):
+        # same origin as the Gerbers and drill, else pick-and-place is shifted from the board
+        pos = lambda: dict((label, cmd) for _, label, cmd, _ in  # noqa: E731
+                           release.export_commands(Path("kicad-cli"), self.tmp, "BRD"))["position"]
+        self.assertNotIn("--use-drill-file-origin", pos())
+        (self.tmp / "BRD.kicad_pcb").write_text("(pcbplotparams (useauxorigin yes))", encoding="utf-8")
+        self.assertIn("--use-drill-file-origin", pos())
 
     def test_drill_origin_follows_gerber_plot_setting(self):
         drill = lambda: dict((label, cmd) for _, label, cmd, _ in  # noqa: E731
@@ -895,12 +902,11 @@ class Release(TmpCase):
         self.assertEqual(cm.exception.code, 3)
         self.assertIn("claude", str(cm.exception))
 
-    def test_claude_review_failure_publishes_nothing(self):
-        with self.assertRaises(Stop) as cm:
-            self.review(FakeTools(silent={"--allowedTools"}))
-        self.assertEqual(cm.exception.code, 5)
-        self.assertIn(release.REVIEW, str(cm.exception))
-        self.assertFalse(self.final.exists())
+    def test_claude_review_failure_still_publishes(self):
+        # advice only: a failed review (e.g. not signed in) costs the report, never the release
+        self.review(FakeTools(silent={"--allowedTools"}))
+        self.assertTrue(self.final.exists())
+        self.assertFalse((self.final / DOC / "BRD_schematic_review.md").exists())
 
     def test_ibom_unticked_needs_no_plugin(self):
         self.configure(outputs={"ibom": False})
@@ -1184,6 +1190,41 @@ class FabExports(TmpCase):
         out = self.tmp / "tp.csv"
         fab_exports.main(["testpoints", str(e2e / "board.kicad_pcb"), str(out)])
         self.assertEqual(out.read_bytes(), golden.read_bytes())
+
+
+class FailureReasons(unittest.TestCase):
+    """A failed or odd run says why, in words a user can act on."""
+
+    def test_missing_program_is_named(self):
+        with mock.patch.object(release, "run", side_effect=FileNotFoundError):
+            with self.assertRaises(Stop) as cm:
+                release.sh(["git", "status"])
+        self.assertIn("git was not found", str(cm.exception))
+
+    def test_hung_command_is_stopped(self):
+        with mock.patch.object(release, "run", side_effect=subprocess.TimeoutExpired("x", 1)):
+            with self.assertRaises(Stop) as cm:
+                release.sh(["kicad-cli", "pcb"])
+        self.assertEqual(cm.exception.code, 5)
+        self.assertIn("hung", str(cm.exception))
+
+    def test_blocked_message_gives_reason_and_caps_items(self):
+        v = {"blocking": [{"description": "Parity did not run", "reason": "no schematic",
+                           "items": [f"item {i}" for i in range(30)]}]}
+        text = release._blocked(json.dumps(v))
+        self.assertIn("why: no schematic", text)
+        self.assertIn("and 10 more", text)
+        self.assertNotIn("item 25", text)
+
+    def test_rev_git_cannot_tag_is_refused(self):
+        for bad in ("1..2", "1.0.", ".1", "A@{1", "1.lock"):
+            with self.assertRaises(Stop, msg=bad):
+                release.rev_slug(bad)
+
+    def test_board_name_with_space_is_blamed_not_the_pattern(self):
+        with self.assertRaises(Stop) as cm:
+            release.release_name("my board", "1", DAY)
+        self.assertIn("Board file name", str(cm.exception))
 
 
 if __name__ == "__main__":

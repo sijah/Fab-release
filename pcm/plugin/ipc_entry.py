@@ -13,6 +13,7 @@ import subprocess
 import sys
 import textwrap
 import threading
+import traceback
 import time
 from pathlib import Path
 
@@ -57,6 +58,7 @@ def run_release(path, cfg, progress, *flags):
     proc = subprocess.Popen([sys.executable, "-u", str(RELEASE), *flags, str(path)],
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                             encoding="utf-8", errors="replace",
+                            env={**os.environ, "PYTHONUTF8": "1"},  # else pipes are cp1252: odd paths crash it
                             creationflags=subprocess.CREATE_NO_WINDOW)
     lines = queue.Queue()
 
@@ -137,7 +139,7 @@ def release(path, cfg, progress):
             return 0
         r = run_release(path, cfg, progress, "--allow-dirty")
     if r.returncode == CANCELLED:
-        wx.MessageBox("Release cancelled. Nothing was published.", TITLE, wx.ICON_INFORMATION)
+        wx.MessageBox("Release cancelled. Nothing should have been published; if the release folder exists, check it.", TITLE, wx.ICON_INFORMATION)
         return 0
     untagged = re.match(r"Released (.+), but git tag failed", stop_message(r)) if r.returncode == 5 else None
     if r.returncode == 0 or untagged:  # untagged: published, only the tag failed (e.g. a git lock)
@@ -165,7 +167,12 @@ def stop_message(r):
     i = out.rfind("STOP: ")
     if i >= 0:
         return out[i + 6:].strip()
-    lines = out.strip().splitlines()[-40:] or ["release.py stopped without saying why."]
+    lines = out.strip().splitlines()[-40:]
+    if not any(re.search(r"Error|Exception|Traceback", l) for l in lines):
+        # killed (antivirus, crash, out of memory): the last line is only a step label
+        step = lines[-1].strip() if lines else "starting"
+        return (f"release.py ended unexpectedly (exit 0x{r.returncode & 0xFFFFFFFF:08X}) during "
+                f"{step}. Antivirus or a crash? Nothing was published.\n" + "\n".join(lines))
     return "\n".join([lines[-1], *lines])
 
 
@@ -385,9 +392,14 @@ class SettingsDialog(wx.Dialog):
             (rev, self.slug), self.rev_error = board_rev(self.path, text), None
         except Stop as e:
             rev, self.slug, self.rev_error = None, None, str(e)
-        r = git(self.path.parent, "rev-parse", "HEAD")
-        self.git_head = r.stdout.strip() if r.returncode == 0 else None
+        try:
+            r = git(self.path.parent, "rev-parse", "HEAD")
+        except Stop:  # git not installed: the release itself explains it when run
+            r = None
+        self.git_head = r.stdout.strip() if r and r.returncode == 0 else None
         self.head.SetLabel(f"{self.board}    rev {self.slug}" if rev else self.board)
+        self.no_testpoints = "pad_prop_testpoint" not in text
+        self.no_stackup = "(stackup" not in text  # Board Setup > Physical Stackup never saved
         self.unplotted, copper = unplotted_layers(text), copper_layers(text)
         self.copper.SetLabel(f"{len(copper)} copper layers")
         self.copper.SetToolTip(f"{', '.join(copper)}\nLayers are chosen in File > Plot. Every release "
@@ -419,6 +431,12 @@ class SettingsDialog(wx.Dialog):
         if gerber and self.unplotted:  # a warning only: the release's own Gerber check decides
             problems.append(f"Not ticked in File > Plot: {', '.join(self.unplotted)}. Tick them and "
                             "save the board, or the release stops at the Gerber check.")
+        if gerber and self.no_stackup:  # a warning only: the stackup file is still written, but empty
+            problems.append("The board has no stackup. Set it in Board Setup > Physical Stackup and "
+                            "save the board, or the stackup file will list no copper or dielectric.")
+        if self.ticks["testpoints"].GetValue() and self.no_testpoints:
+            problems.append("No pad has Fabrication property \"Test point pad\". Untick Test points, "
+                            "or the release stops at that step.")
         self.copper.Show(gerber)
         # long paths have no spaces: textwrap breaks them too, so the dialog never outgrows the screen
         self.target.SetLabel(textwrap.fill(target, 100, subsequent_indent="    "))
@@ -444,7 +462,12 @@ class SettingsDialog(wx.Dialog):
                              "files will be named .gtl, .gbl, ... instead of .gbr.\n\nClick OK to proceed.",
                              TITLE, wx.OK | wx.CANCEL | wx.ICON_WARNING) != wx.OK:
                 return
-        save_config(self.path.parent, self.board, cfg)
+        try:
+            save_config(self.path.parent, self.board, cfg)
+        except OSError as e:
+            wx.MessageBox(f"Cannot save {self.board}.release.json in {self.path.parent}:\n\n{e}\n\n"
+                          "Is the folder read-only?", TITLE, wx.ICON_ERROR)
+            return
         self.busy, self.started = True, time.monotonic()
         for w in inputs(self):  # only Cancel stays live while it runs
             w.Enable(w is self.cancel_button)
@@ -453,6 +476,9 @@ class SettingsDialog(wx.Dialog):
         self.Fit()
         try:
             self.code = release(self.path, cfg, self.progress)
+        except Exception as e:  # never leave the dialog stuck with its inputs disabled
+            self.code = 1
+            report(f"{TITLE}: internal error", f"{type(e).__name__}: {e}", traceback.format_exc())
         finally:
             self.busy = False
         self.EndModal(wx.ID_OK)

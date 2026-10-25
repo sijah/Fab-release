@@ -70,8 +70,9 @@ def expand_vars(text, pro):
 
     def sub(m):
         if m[1] not in names:
-            raise Stop(4, f"The PCB rev uses ${{{m[1]}}}, which is not defined in "
-                          "Board Setup > Text Variables.")
+            where = ("Board Setup > Text Variables" if Path(pro).is_file()
+                     else f"{Path(pro).name}, which is not beside the board")
+            raise Stop(4, f"The PCB rev uses ${{{m[1]}}}, which is not defined in {where}.")
         return names[m[1]]
     return re.sub(r"\$\{([^}]+)\}", sub, text)
 
@@ -91,6 +92,14 @@ def release_target(pcb, cfg, slug, day):
     return name, Path(pcb).parent / cfg["folder"] / name  # "." = beside the board; absolute replaces it
 
 
+def _local_drive(path):
+    """True on a fixed local disk, where the Recycle Bin works (not network/removable/OneDrive-online)."""
+    if sys.platform != "win32":
+        return True
+    import ctypes
+    return ctypes.windll.kernel32.GetDriveTypeW(str(Path(path).resolve().anchor)) == 3  # DRIVE_FIXED
+
+
 def heads_up(project, final, tag, head):
     """What a release to final, tagged tag, will do that the user should know first: replace an
     earlier release of the same name, or skip the tag because this rev is already tagged.
@@ -98,7 +107,9 @@ def heads_up(project, final, tag, head):
     notes = []
     if final.exists() or final.with_name(f"{final.name}.zip").exists():
         notes.append(f"{final.name} already exists. Release replaces it; the old one goes "
-                     "to the Recycle Bin.")
+                     "to the Recycle Bin."
+                     + ("" if _local_drive(final) else " This is not a local drive: the old one is "
+                        "deleted for good."))
     tagged = tag_commit(project, tag)
     if tagged and tagged == head:
         notes.append(f"{tag} is already on this commit: a re-run, released untagged.")
@@ -121,6 +132,9 @@ def rev_slug(rev):
     if BAD_CHARS.search(slug):
         raise Stop(4, f"rev {rev!r} has characters a folder or git tag cannot hold "
                       "(spaces or <>:\"/\\|?*~^[).")
+    if ".." in slug or "@{" in slug or slug.startswith(".") or slug.endswith((".", ".lock")):
+        raise Stop(4, f"rev {rev!r} cannot be a git tag (no \"..\", \"@{{\", leading or trailing \".\", "
+                      "or \".lock\"). Change the rev in Board Setup > Title Block.")
     return slug
 
 
@@ -129,9 +143,12 @@ NAME = "{board}_{rev}_{date}"
 
 def release_name(board, slug, day, fmt=NAME):
     """fmt takes {board}, {rev} (the slug) and {date} (DDMMYY)."""
+    if BAD_CHARS.search(board):
+        raise Stop(4, f"Board file name {board!r} has a space or one of <>:\"/\\|?*~^[. Rename the "
+                      "board (and its .kicad_sch and .kicad_pro) without them.")
     try:
         name = fmt.format(board=board, rev=slug, date=f"{day:%d%m%y}")
-    except (KeyError, IndexError, ValueError):
+    except (KeyError, IndexError, ValueError, AttributeError):
         name = ""
     if not name or BAD_CHARS.search(name):
         raise Stop(4, f"Release name pattern {fmt!r} must give a folder name from {{board}}, "
@@ -215,14 +232,22 @@ def save_config(project, board, cfg):
     config_path(project, board).write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
 
 
+STEP_TIMEOUT = 30 * 60  # seconds per command: a hung kicad-cli/iBOM/claude must not spin forever
 run = subprocess.run  # tests swap this for a fake git / gate / kicad-cli / script runner
 
 
 def sh(cmd, **kw):
     # no console window per kicad-cli/git call when started from the KiCad button
     flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-    return run([str(c) for c in cmd], capture_output=True, text=True,
-               encoding="utf-8", errors="replace", creationflags=flags, **kw)
+    kw.setdefault("timeout", STEP_TIMEOUT)
+    try:
+        return run([str(c) for c in cmd], capture_output=True, text=True,
+                   encoding="utf-8", errors="replace", creationflags=flags, **kw)
+    except FileNotFoundError:
+        raise Stop(3, f"{Path(str(cmd[0])).name} was not found. Install it or add it to PATH.")
+    except subprocess.TimeoutExpired:
+        raise Stop(5, f"{Path(str(cmd[0])).name} ran for over {kw['timeout'] // 60} minutes and "
+                      "was stopped (hung?). Nothing published.")
 
 
 def git(project, *args):
@@ -247,6 +272,9 @@ def git_state(project, ignore=()):
     ignore: extra globs (relative to project) that never count, e.g. own_output()."""
     head = git(project, "rev-parse", "HEAD")
     if head.returncode:
+        if "dubious ownership" in head.stderr or "safe.directory" in head.stderr:
+            raise Stop(4, f"git refused this folder: {head.stderr.strip().splitlines()[0]}\n"
+                          f"Run: git config --global --add safe.directory {project}")
         return None, []
     # .kicad_prl is local view state KiCad rewrites on open/close; never a release input.
     # *.release.json is saved by the button on every run; the manifest records what was used.
@@ -416,9 +444,16 @@ def step(label, cmd, expect=(), **kw):
     print(f"  {label}", flush=True)
     r = sh(cmd, **kw)
     missing = [str(p) for p in expect if not Path(p).exists()]
+    if not (r.returncode or missing):
+        note = re.search(r"(?i)^.*(could not add 3d model|3d model.*not found).*$", r.stdout + r.stderr, re.M)
+        if note:  # kicad-cli exits 0 with a STEP/render lacking those parts
+            print(f"NOTE: {label}: some 3D models are missing, those parts are boxes or absent. "
+                  f"{note[0].strip()}", flush=True)
     if r.returncode or missing:
-        raise Stop(5, f"{label} failed (exit {r.returncode})"
-                      + (f"; missing: {', '.join(missing)}" if missing else "")
+        why = (f"it exited {r.returncode}" if r.returncode else "it exited 0 but wrote nothing")
+        raise Stop(5, f"{label} failed: {why}"
+                      + (f"; expected file not made: {', '.join(Path(p).name for p in missing)}"
+                         if missing else "")
                       + f"\n{r.stdout}{r.stderr}")
 
 
@@ -465,7 +500,8 @@ def check_gerbers(fab, pcb_text):
         elif kind == "Copper" and arg[1:].isdigit() and 0 < int(arg[1:]) <= len(copper):
             found.add(copper[int(arg[1:]) - 1])
         found.add({"Profile": "Edge.Cuts", "Plated": "plated drill"}.get(kind) or _SIDED.get((kind, arg)))
-    missing = [n for n in [*copper, *FAB_LAYERS, "plated drill"] if n not in found]
+    plated = re.search(r"\(via[\s(]|thru_hole", pcb_text)  # an SMD-only board has no plated drill file
+    missing = [n for n in [*copper, *FAB_LAYERS, *(["plated drill"] if plated else [])] if n not in found]
     if missing:
         raise Stop(5, f"Gerbers: missing {', '.join(missing)}. Tick them in File > Plot, save the "
                       "board and release again.")
@@ -479,11 +515,16 @@ def _blocked(stdout):
     except ValueError:
         return f"prefab-gate BLOCKED. Fix the board, commit, rerun.\n{stdout}"
     lines = [f"prefab-gate BLOCKED: {len(v.get('blocking', []))} blocking, "
-             f"{len(v.get('cosmetic', []))} cosmetic. Fix in the PCB editor (Inspect > Design Rules "
-             "Checker), commit, rerun."]
+             f"{len(v.get('cosmetic', []))} cosmetic. Fix the items below (DRC: Inspect > Design Rules "
+             "Checker; also schematic parity and trace width), commit, rerun."]
     for f in v.get("blocking", []):
         lines.append(f"\n- {f.get('description', f.get('type', '?'))}")
-        lines += [f"    {item}" for item in f.get("items", [])]
+        if f.get("reason"):
+            lines.append(f"    why: {f['reason']}")
+        items = f.get("items", [])
+        lines += [f"    {item}" for item in items[:20]]
+        if len(items) > 20:
+            lines.append(f"    ... and {len(items) - 20} more (run DRC in KiCad for the full list)")
     return "\n".join(lines)
 
 
@@ -492,12 +533,17 @@ def run_gate(pcb, cli, gate=DEFAULTS["gate"]):
     print("  prefab-gate check", flush=True)
     flags = ((["--strict"] if gate["strict"] else []) + ([] if gate["parity"] else ["--no-parity"])
              + ([] if gate["ampacity"] else ["--no-ampacity"]))
+    # PYTHONUTF8: kicad-cli speaks UTF-8; the gate would decode it as cp1252 and choke on some names
     r = sh([sys.executable, GATE, "check", "--json", *flags, pcb],
-           env={**os.environ, "KICAD_CLI": str(cli)})
+           env={**os.environ, "KICAD_CLI": str(cli), "PYTHONUTF8": "1"})
     if r.returncode == 2:
         raise Stop(2, _blocked(r.stdout))
     if r.returncode:
-        raise Stop(3, f"prefab-gate could not run (exit {r.returncode}).\n{r.stdout}{r.stderr}")
+        out = r.stdout + r.stderr
+        why = ("kicad-cli wrote no DRC report; check the KiCad install." if "drc.json" in out
+               else "prefab-gate crashed (internal error)." if "Traceback" in out
+               else "prefab-gate could not run.")
+        raise Stop(3, f"{why} (exit {r.returncode})\n{out}")
     try:
         return json.loads(r.stdout)
     except ValueError:
@@ -557,7 +603,8 @@ def export_commands(cli, st, board, cfg=DEFAULTS):
                    "--map-format", "gerberx2", "--generate-report", "--report-path", o["drill_report"],
                    "-o", fab, pcb], [o["drill_report"]]),
         ("position", "position", [cli, "pcb", "export", "pos", "--format", "csv", "--units", "mm",
-                      "--side", "both", "--use-drill-file-origin", "-o", o["pos"], pcb], [o["pos"]]),
+                      "--side", "both", *(["--use-drill-file-origin"] if origin == "plot" else []),
+                      "-o", o["pos"], pcb], [o["pos"]]),
         ("bom", "BOM", [cli, "sch", "export", "bom",
                         *(["--preset", cfg["bom_preset"]] if cfg["bom_preset"] else
                           ["--fields", cfg["bom_fields"], "--labels", cfg["bom_labels"],
@@ -661,7 +708,12 @@ def build(st, partial, board, name, cli, py, plugins, cfg=DEFAULTS, claude=None)
     if on["gerber"]:
         check_gerbers(st / "out" / "fab", (st / f"{board}.kicad_pcb").read_text(encoding="utf-8-sig"))
     if claude:  # last: minutes long, so only once everything else has passed
-        step(REVIEW, review_command(claude, st, board), [review_report(st, board)], cwd=st)
+        try:
+            step(REVIEW, review_command(claude, st, board), [review_report(st, board)], cwd=st)
+        except Stop as e:  # advice only: never costs the release
+            print(f"NOTE: Claude review failed, released without the report (run `claude` once "
+                  f"to sign in): {str(e).splitlines()[0]}", flush=True)
+            claude = None
 
     def put(src, folder, as_name=None):
         (partial / folder).mkdir(parents=True, exist_ok=True)
@@ -709,6 +761,9 @@ def release(pcb, allow_dirty=False, tag=True, today=None):
         raise Stop(3, f"No board at {pcb}")
     if not (project / f"{board}.kicad_sch").is_file():
         raise Stop(4, f"{board}.kicad_sch must sit beside the board (gate parity and the BOM need it).")
+    if not (project / f"{board}.kicad_pro").is_file():
+        raise Stop(4, f"{board}.kicad_pro must sit beside the board (net classes, DRC rules and text "
+                      "variables are read from it).")
     cfg = load_config(project, board)
     if not any(cfg["outputs"].values()):
         raise Stop(4, "No outputs are ticked. Tick at least one.")
@@ -739,8 +794,17 @@ def release(pcb, allow_dirty=False, tag=True, today=None):
     do_tag = tag and commit is not None and not allow_dirty and not earlier  # dirty matches no commit
 
     cli_version = sh([cli, "version"]).stdout.strip()
+    if re.match(r"\d+", cli_version) and not cli_version.startswith("10."):
+        raise Stop(3, f"kicad-cli at {cli} is KiCad {cli_version}; Fab Release needs KiCad 10. "
+                      "Set KICAD_CLI to KiCad 10's bin\\kicad-cli.exe.")
     source_sha = sha256(pcb)
-    rel.mkdir(parents=True, exist_ok=True)
+    try:
+        rel.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise Stop(4, f"Release folder {rel} cannot be created: {e}")
+    if cfg["outputs"]["gerber"] and "(stackup" not in pcb.read_text(encoding="utf-8-sig"):
+        print("NOTE: no Physical Stackup saved in the board; the stackup file lists no copper or "
+              "dielectric. Set it in Board Setup > Physical Stackup.", flush=True)
     ignore = rel / ".gitignore"  # release output never shows as uncommitted
     # only in a subfolder of the board's folder, and never over an existing one
     if rel.resolve() != project and rel.resolve().is_relative_to(project) and not ignore.exists():
@@ -774,6 +838,13 @@ def release(pcb, allow_dirty=False, tag=True, today=None):
             (partial / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
             zip_files(zip_partial, [(f"{name}/{p.relative_to(partial).as_posix()}", p)
                                     for p in sorted(partial.rglob("*")) if p.is_file()])
+            for old in (final, zip_final):  # locked? say so before the earlier release is binned
+                if old.exists():
+                    try:
+                        os.rename(old, old)
+                    except OSError as e:
+                        raise Stop(5, f"Cannot replace {old.name}: {e}. Close it (Explorer, mail, "
+                                      "OneDrive, antivirus) and release again. Nothing published.")
             trash(final)  # an earlier release of the same name (heads_up said so)
             trash(zip_final)
             partial.rename(final)  # the commit point: before this nothing looks released
@@ -810,6 +881,11 @@ def main(argv=None):
     except Stop as e:
         print(f"STOP: {e}", file=sys.stderr)
         return e.code
+    except OSError as e:  # disk full, read-only or locked output folder: say so, not a traceback
+        print(f"STOP: Could not write {e.filename or 'a release file'} ({e.strerror or e}). The folder "
+              "is read-only, the disk is full, or a file is held by OneDrive or antivirus. Nothing "
+              "was published.", file=sys.stderr)
+        return 5
 
 
 if __name__ == "__main__":
