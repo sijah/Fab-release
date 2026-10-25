@@ -9,7 +9,7 @@
       "name": "fab-release",
       "source": "./",
       "description": "Makes a verified KiCad 10 manufacturing release: prefab-gate, fab and assembly outputs, iBOM, test points, manifest, zip and git tag. Windows only.",
-      "version": "1.0.0",
+      "version": "1.2.1",
       "author": { "name": "Sijah AK" }
     }
   ]

@@ -149,12 +149,15 @@ OUTPUTS = {
     "bom": "BOM CSV",
     "ibom": "Interactive BOM (iBOM)",
     "schematic_pdf": "Schematic PDF",
+    "schematic_pdf_a4": "Schematic PDF, fit to A4",
     "assembly_pdf": "Assembly PDF (silk + courtyard)",
     "step": "STEP 3D model",
-    "renders": "Renders: top, bottom, isometric",
+    "render_top": "Render top",
+    "render_bottom": "Render bottom",
+    "render_iso": "Render isometric",
 }
 DEFAULTS = {
-    "outputs": {k: True for k in OUTPUTS},
+    "outputs": {k: k != "schematic_pdf_a4" for k in OUTPUTS},
     "bom_fields": "Reference,Value,Footprint,${QUANTITY},${DNP},MPN",
     "bom_labels": "Reference,Value,Footprint,Qty,DNP,MPN",
     "bom_group_by": "Value,Footprint,MPN,${DNP}",
@@ -166,6 +169,9 @@ DEFAULTS = {
     "fab_extra": "Required_impedance_control.xlsx",
     # prefab-gate: strict = cosmetic findings block too; parity/ampacity = run those checks
     "gate": {"strict": False, "parity": True, "ampacity": True},
+    # Claude Code reviews the schematic against its datasheets; the report lands in
+    # 4_Documentation. Advice only: findings never block. Needs `claude` on PATH.
+    "claude_review": False,
 }
 
 
@@ -197,6 +203,10 @@ def load_config(project, board):
                 raise Stop(4, f"{p.name}: {where}{k} must be {type(into[k]).__name__}")
             else:
                 into[k] = v
+    outs = user.get("outputs") if isinstance(user, dict) else None
+    if isinstance(outs, dict) and "renders" in outs:  # before 1.2.0 one tick for all three
+        on = outs.pop("renders")
+        outs.update({k: outs.get(k, on) for k in ("render_top", "render_bottom", "render_iso")})
     merge(cfg, user, "")
     return cfg
 
@@ -371,11 +381,40 @@ def find_tools(ibom=True):
     return cli, py, plugins_dir() if ibom else None
 
 
-def step(label, cmd, expect=()):
+def find_claude():
+    claude = shutil.which("claude")
+    if not claude:
+        raise Stop(3, "Claude review is ticked but Claude Code (claude) is not on PATH. "
+                      "Install it from claude.com/claude-code, or untick Claude review.")
+    return claude
+
+
+REVIEW = "schematic review (Claude)"
+# Headless runs cannot ask permission: only what the review needs. No other shell, and Write
+# can only add the report; an edit to a staged input fails the release's hash check.
+REVIEW_TOOLS = "Read Glob Grep Write WebSearch WebFetch Bash(python:*) Bash(py:*)"
+
+
+def review_report(st, board):
+    return st / "review" / f"{board}_schematic_review.md"
+
+
+def review_command(claude, st, board):
+    """claude -p running skills/schematic-review on the staged schematic; cwd must be st."""
+    skill = HERE / "skills" / "schematic-review" / "SKILL.md"
+    prompt = (f"Review the KiCad schematic {st / board}.kicad_sch by following {skill}. "
+              f"${{CLAUDE_PLUGIN_ROOT}} there means {HERE}. Use {st / 'review'} as the facts "
+              f"folder and write the report to {review_report(st, board)} (a new file, do not "
+              "ask). Change no other file. Reply with one line: the counts of likely bugs, "
+              "checks and nits.")
+    return [claude, "-p", prompt, "--allowedTools", REVIEW_TOOLS, "--add-dir", HERE]
+
+
+def step(label, cmd, expect=(), **kw):
     """Run one command. It failed if it exits non-zero OR leaves an expected file missing:
     kicad-cli and the fab-data script can both exit 0 having written nothing."""
     print(f"  {label}", flush=True)
-    r = sh(cmd)
+    r = sh(cmd, **kw)
     missing = [str(p) for p in expect if not Path(p).exists()]
     if r.returncode or missing:
         raise Stop(5, f"{label} failed (exit {r.returncode})"
@@ -469,20 +508,35 @@ def outputs(out, board):
     """Where the exports and the test-point plugin write inside the stage's out/ folder."""
     fab = out / "fab"
     return {
-        "gerber_f_cu": fab / f"{board}-F_Cu.gbr",
         "gerber_job": fab / f"{board}-job.gbrjob",
         "drill_report": fab / f"{board}-drl.rpt",
         "pos": out / f"{board}-all-pos.csv",
         "bom": out / f"{board}-bom.csv",
         "sch_pdf": out / f"{board}.pdf",
+        "sch_a4": out / f"{board}_A4.pdf",
         "assembly_top": out / f"{board}_assembly_top.pdf",
         "assembly_bottom": out / f"{board}_assembly_bottom.pdf",
+        "assembly_bottom_mirrored": out / f"{board}_assembly_bottom_mirrored.pdf",
         "step": out / f"{board}.step",
         "png_top": out / f"{board}_F.png",
         "png_bottom": out / f"{board}_B.png",
         "png_iso": out / f"{board}_iso.png",
         "testpoints": out / f"{board}-testpoints.csv",
     }
+
+
+A4_JOBSET = "_a4.kicad_jobset"  # in the stage, written by build()
+
+
+def a4_jobset(out, board):
+    """A one-job KiCad jobset: the schematic PDF scaled to A4, KiCad's own plot (links kept).
+    page_size "A4" verified on kicad-cli 10.0.7; other values silently plot as drawn."""
+    return {"jobs": [{"id": "a4a4a4a4-0000-4000-8000-000000000001", "description": "",
+                      "type": "sch_export_plot_pdf",
+                      "settings": {"page_size": "A4", "output_filename": f"{board}_A4.pdf"}}],
+            "meta": {"version": 1},
+            "outputs": [{"id": "a4a4a4a4-0000-4000-8000-000000000002", "description": "", "only": [],
+                         "type": "folder", "settings": {"output_path": str(out)}}]}
 
 
 def export_commands(cli, st, board, cfg=DEFAULTS):
@@ -498,7 +552,7 @@ def export_commands(cli, st, board, cfg=DEFAULTS):
                                                 if pcb.is_file() else "") else "absolute"
     return [
         ("gerber", "gerbers", [cli, "pcb", "export", "gerbers", "--board-plot-params", "-o", fab, pcb],
-         [o["gerber_f_cu"], o["gerber_job"]]),
+         [o["gerber_job"]]),  # layer files' extension follows File > Plot (.gbr or Protel .gtl); check_gerbers reads them
         ("gerber", "drill", [cli, "pcb", "export", "drill", "--drill-origin", origin, "--excellon-separate-th", "--generate-map",
                    "--map-format", "gerberx2", "--generate-report", "--report-path", o["drill_report"],
                    "-o", fab, pcb], [o["drill_report"]]),
@@ -510,19 +564,27 @@ def export_commands(cli, st, board, cfg=DEFAULTS):
                            "--group-by", cfg["bom_group_by"]]),
                         "-o", o["bom"], sch], [o["bom"]]),
         ("schematic_pdf", "schematic PDF", [cli, "sch", "export", "pdf", "-o", o["sch_pdf"], sch], [o["sch_pdf"]]),
+        # sch export pdf has no page size; a jobset's PDF job does (File > Plot's "Page size")
+        ("schematic_pdf_a4", "schematic PDF A4", [cli, "jobset", "run", "--stop-on-error", "-f",
+                                                  st / A4_JOBSET, st / f"{board}.kicad_pro"], [o["sch_a4"]]),
         # silk + courtyard + outline per side, fit to the page, black and white for printing;
-        # bottom seen through the board from the top (not mirrored), as the hand-made drawings
+        # bottom both seen through the board from the top, as the hand-made drawings, and
+        # mirrored, as seen holding the board bottom up
         ("assembly_pdf", "assembly PDF top", [*asm_pdf, "--layers", "F.SilkS,F.CrtYd,Edge.Cuts",
                                               "-o", o["assembly_top"], asm], [o["assembly_top"]]),
         ("assembly_pdf", "assembly PDF bottom", [*asm_pdf, "--layers", "B.SilkS,B.CrtYd,Edge.Cuts",
                                                  "-o", o["assembly_bottom"], asm], [o["assembly_bottom"]]),
+        ("assembly_pdf", "assembly PDF bottom mirrored", [*asm_pdf, "--mirror", "--layers",
+                                                          "B.SilkS,B.CrtYd,Edge.Cuts",
+                                                          "-o", o["assembly_bottom_mirrored"], asm],
+         [o["assembly_bottom_mirrored"]]),
         ("step", "STEP", [cli, "pcb", "export", "step", "--subst-models", "-f", "-o", o["step"], pcb],
          [o["step"]]),
-        ("renders", "render top", [cli, "pcb", "render", "--side", "top", "--quality", "high",
+        ("render_top", "render top", [cli, "pcb", "render", "--side", "top", "--quality", "high",
                         "-o", o["png_top"], pcb], [o["png_top"]]),
-        ("renders", "render bottom", [cli, "pcb", "render", "--side", "bottom", "--quality", "high",
+        ("render_bottom", "render bottom", [cli, "pcb", "render", "--side", "bottom", "--quality", "high",
                            "-o", o["png_bottom"], pcb], [o["png_bottom"]]),
-        ("renders", "render isometric", [cli, "pcb", "render", "--rotate", "-45,0,45", "--quality",
+        ("render_iso", "render isometric", [cli, "pcb", "render", "--rotate", "-45,0,45", "--quality",
                               "high", "-o", o["png_iso"], pcb], [o["png_iso"]]),
     ]
 
@@ -553,7 +615,8 @@ def planned_steps(board, cfg=DEFAULTS):
     st, plugins = Path("stage"), (Path("plugins") if cfg["outputs"]["ibom"] else None)
     cmds = (export_commands(Path("kicad-cli"), st, board, cfg)
             + script_commands(Path("python"), plugins, st, board))
-    return ["prefab-gate check"] + [label for key, label, _, _ in cmds if cfg["outputs"][key]]
+    return (["prefab-gate check"] + [label for key, label, _, _ in cmds if cfg["outputs"][key]]
+            + [REVIEW] * cfg["claude_review"])
 
 
 # Release folder layout, by who receives it: fab house, assembly house, test jig, everyone.
@@ -562,7 +625,7 @@ FAB, ASM, TEST, DOC = "1_Fabrication", "2_Assembly", "3_Test", "4_Documentation"
 GROUPS = ((FAB, ("gerber",)),
           (ASM, ("position", "bom", "ibom", "component_data", "assembly_pdf")),
           (TEST, ("testpoints",)),
-          (DOC, ("schematic_pdf", "step", "renders")))
+          (DOC, ("schematic_pdf", "schematic_pdf_a4", "step", "render_top", "render_bottom", "render_iso")))
 
 
 def zip_files(dest, files):
@@ -576,7 +639,7 @@ def extra_files(cfg):
     return [FAB_FILES / f.strip() for f in cfg["fab_extra"].split(";") if f.strip()]  # absolute stays
 
 
-def build(st, partial, board, name, cli, py, plugins, cfg=DEFAULTS):
+def build(st, partial, board, name, cli, py, plugins, cfg=DEFAULTS, claude=None):
     """The ticked exports, scripts and plugins inside the stage st, then the release layout in
     partial."""
     on, o = cfg["outputs"], outputs(st / "out", board)
@@ -589,12 +652,16 @@ def build(st, partial, board, name, cli, py, plugins, cfg=DEFAULTS):
         (st / ASSEMBLY / f"{board}.kicad_pcb").write_text(show_references(text), encoding="utf-8")
         if (st / f"{board}.kicad_pro").exists():  # text variables, title block
             shutil.copy2(st / f"{board}.kicad_pro", st / ASSEMBLY)
+    if on["schematic_pdf_a4"]:
+        (st / A4_JOBSET).write_text(json.dumps(a4_jobset(st / "out", board)), encoding="utf-8")
     for key, label, cmd, expect in (export_commands(cli, st, board, cfg)
                                     + script_commands(py, plugins, st, board)):
         if on[key]:
             step(label, cmd, expect)
     if on["gerber"]:
         check_gerbers(st / "out" / "fab", (st / f"{board}.kicad_pcb").read_text(encoding="utf-8-sig"))
+    if claude:  # last: minutes long, so only once everything else has passed
+        step(REVIEW, review_command(claude, st, board), [review_report(st, board)], cwd=st)
 
     def put(src, folder, as_name=None):
         (partial / folder).mkdir(parents=True, exist_ok=True)
@@ -611,9 +678,11 @@ def build(st, partial, board, name, cli, py, plugins, cfg=DEFAULTS):
     for key, src in (("position", o["pos"]),
                      ("component_data", st / "ASSAY" / "pcb_component_data.csv"),
                      ("assembly_pdf", o["assembly_top"]), ("assembly_pdf", o["assembly_bottom"]),
+                     ("assembly_pdf", o["assembly_bottom_mirrored"]),
                      ("testpoints", o["testpoints"]),
-                     ("schematic_pdf", o["sch_pdf"]),
-                     ("renders", o["png_top"]), ("renders", o["png_bottom"]), ("renders", o["png_iso"])):
+                     ("schematic_pdf", o["sch_pdf"]), ("schematic_pdf_a4", o["sch_a4"]),
+                     ("render_top", o["png_top"]), ("render_bottom", o["png_bottom"]),
+                     ("render_iso", o["png_iso"])):
         if on[key]:
             put(src, folder[key])
     for f in extra_files(cfg):
@@ -628,6 +697,8 @@ def build(st, partial, board, name, cli, py, plugins, cfg=DEFAULTS):
     if on["step"]:
         (partial / folder["step"]).mkdir(exist_ok=True)
         zip_files(partial / folder["step"] / f"{name}.zip", [(o["step"].name, o["step"])])
+    if claude:
+        put(review_report(st, board), DOC)
 
 
 def release(pcb, allow_dirty=False, tag=True, today=None):
@@ -642,6 +713,7 @@ def release(pcb, allow_dirty=False, tag=True, today=None):
     if not any(cfg["outputs"].values()):
         raise Stop(4, "No outputs are ticked. Tick at least one.")
     cli, py, plugins = find_tools(ibom=cfg["outputs"]["ibom"])
+    claude = find_claude() if cfg["claude_review"] else None
     missing = [f for f in extra_files(cfg) if not f.is_file()]
     if missing:
         raise Stop(3, "Extra fab file not found (BOM, name, prefab-gate tab):\n"
@@ -681,7 +753,7 @@ def release(pcb, allow_dirty=False, tag=True, today=None):
         verdict = run_gate(st / pcb.name, cli, cfg["gate"])
         checked = hash_inputs(st)  # after the gate's zone refill, the last write allowed
         try:
-            build(st, partial, board, name, cli, py, plugins, cfg)
+            build(st, partial, board, name, cli, py, plugins, cfg, claude)
             if hash_inputs(st) != checked:
                 raise Stop(3, "A staged board/schematic changed after the gate checked it. "
                               "Nothing published.")

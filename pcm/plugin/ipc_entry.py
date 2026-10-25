@@ -22,7 +22,8 @@ import wx  # noqa: E402
 from kipy.kicad import KiCad  # noqa: E402
 
 from release import (DEFAULTS, FAB, GROUPS, OUTPUTS, VERSION, Stop, board_rev,  # noqa: E402
-                     copper_layers, load_config, planned_steps, release_target, save_config,
+                     copper_layers, find_claude, load_config, planned_steps, release_target,
+                     save_config,
                      git, heads_up, tag_name, unplotted_layers)
 
 RELEASE = Path(__file__).with_name("release.py")
@@ -317,6 +318,17 @@ class SettingsDialog(wx.Dialog):
             "Which DRC errors block: Board Setup > Violation Severity, or Exclude in the DRC dialog."))),
             0, wx.ALL, 3)
         inner.Add(gbox, 0, wx.EXPAND | wx.ALL, 10)
+        cbox = wx.StaticBoxSizer(wx.VERTICAL, pane, "Claude (optional)")
+        self.claude = wx.CheckBox(cbox.GetStaticBox(), label="Claude schematic review")
+        self.claude.SetValue(cfg["claude_review"])
+        self.claude.Bind(wx.EVT_CHECKBOX, self.refresh)
+        cbox.Add(self.claude, 0, wx.ALL, 3)
+        cnote = grey(wx.StaticText(cbox.GetStaticBox(), label=(
+            "Claude Code checks each part against its datasheet; the report goes in 4_Documentation. "
+            "Advice only, never blocks. Adds a few minutes. Needs Claude Code installed and signed in.")))
+        cnote.Wrap(self.WRAP)
+        cbox.Add(cnote, 0, wx.ALL, 3)
+        inner.Add(cbox, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
         pane.SetSizer(inner)
         top.Add(book, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 14)
         for key in ("folder", "name", "bom_preset"):
@@ -394,6 +406,8 @@ class SettingsDialog(wx.Dialog):
         try:
             if self.rev_error:
                 raise Stop(4, self.rev_error)
+            if self.claude.GetValue():
+                find_claude()
             name, dest = release_target(self.path, self.config(), self.slug, datetime.date.today())
             shown = dest.relative_to(self.path.parent) if dest.is_relative_to(self.path.parent) else dest
             target = f"Will create   {shown}{os.sep}   and its .zip"
@@ -425,6 +439,11 @@ class SettingsDialog(wx.Dialog):
 
     def on_release(self, _):
         cfg = self.config()
+        if cfg["outputs"]["gerber"] and "(usegerberextensions yes)" in self.path.read_text(encoding="utf-8-sig"):
+            if wx.MessageBox("File > Plot has \"Use Protel filename extensions\" ticked, so the Gerber "
+                             "files will be named .gtl, .gbl, ... instead of .gbr.\n\nClick OK to proceed.",
+                             TITLE, wx.OK | wx.CANCEL | wx.ICON_WARNING) != wx.OK:
+                return
         save_config(self.path.parent, self.board, cfg)
         self.busy, self.started = True, time.monotonic()
         for w in inputs(self):  # only Cancel stays live while it runs
@@ -464,12 +483,14 @@ class SettingsDialog(wx.Dialog):
             tc.ChangeValue(DEFAULTS[key])
         for key, cb in self.gate.items():
             cb.SetValue(DEFAULTS["gate"][key])
+        self.claude.SetValue(DEFAULTS["claude_review"])
         self.refresh()
 
     def config(self):
         return {"outputs": {k: cb.GetValue() for k, cb in self.ticks.items()},
                 **{k: tc.GetValue().strip() for k, tc in self.texts.items()},
-                "gate": {k: cb.GetValue() for k, cb in self.gate.items()}}
+                "gate": {k: cb.GetValue() for k, cb in self.gate.items()},
+                "claude_review": self.claude.GetValue()}
 
 
 if __name__ == "__main__":

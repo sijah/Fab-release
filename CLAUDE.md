@@ -24,6 +24,13 @@ customer data.
 - Per-board settings: `<board>.release.json` beside the board, written by the
   button's dialog, read by the CLI too; never counts as uncommitted; recorded in
   the manifest.
+- `claude_review` (off by default) adds a last step that runs
+  `skills/schematic-review` through `claude -p` (restricted tools) on the
+  staged copy; the report goes in 4_Documentation. The PCM zip bundles
+  `skills/`.
+- Gerber layer files take their extension from File > Plot (`.gbr` or Protel
+  `.gtl`...): never expect a fixed layer file name, `check_gerbers` reads the
+  X2 headers. Only `-job.gbrjob` is a fixed name.
 - Tests: `python -m unittest test_release -v` (no KiCad needed).
 - Needs PCM plugin iBOM; found under
   `<Documents>\KiCad\10.0\3rdparty\plugins` (Documents from the registry) or

@@ -4,8 +4,8 @@
     Install: KiCad > Plugin and Content Manager > Install from File...
 
 Layout per KiCad PCM: metadata.json at the root, code under plugins/, 64x64
-resources/icon.png. plugins/ gets the toolbar action, release.py, scripts/ and
-the vendored prefab_gate/, so the installed package needs nothing
+resources/icon.png. plugins/ gets the toolbar action, release.py, scripts/,
+skills/ (the Claude review) and the vendored prefab_gate/, so the installed package needs nothing
 from this repo. To update the team: bump "version" in metadata.json, rebuild,
 reinstall from file.
 
@@ -91,7 +91,8 @@ def build(out_dir, root=ROOT):
         z.writestr("plugins/icon64.png", png(64))  # dialogs' window icon
         z.write(root / "release.py", "plugins/release.py")
         for src, dest in ((root / "pcm" / "plugin", "plugins"), (root / "scripts", "plugins/scripts"),
-                          (root / "fab", "plugins/fab"), (root / "prefab_gate", "plugins/prefab_gate")):
+                          (root / "fab", "plugins/fab"), (root / "prefab_gate", "plugins/prefab_gate"),
+                          (root / "skills", "plugins/skills")):
             for p in _files(src):
                 z.write(p, f"{dest}/{p.relative_to(src).as_posix()}")
         z.write(root / "LICENSE", "plugins/LICENSE")

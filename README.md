@@ -22,9 +22,11 @@ scripting interface that KiCad 11 removes. Changes are listed in
 ```
 Manufacturing/<board>_<rev>_<DDMMYY>/
   1_Fabrication/    Gerber and drill zip, PCB stackup, extra fab files
-  2_Assembly/       position file, BOM CSV, iBOM, component data, assembly PDFs (top, bottom)
+  2_Assembly/       position file, BOM CSV, iBOM, component data, assembly PDFs (top, bottom, bottom mirrored)
   3_Test/           test point CSV
-  4_Documentation/  schematic PDF, STEP (zipped), renders (top, bottom, isometric)
+  4_Documentation/  schematic PDF (and an A4-fitted copy when ticked), STEP (zipped),
+                    renders (top, bottom, isometric; each its own tick),
+                    Claude schematic review (when ticked)
   manifest.json     tool and KiCad versions, git commit, gate result, settings, SHA-256 of every file
 Manufacturing/<board>_<rev>_<DDMMYY>.zip
 ```
@@ -44,6 +46,10 @@ The release stops before anything is published if:
 - the Gerber files are missing a copper layer, a mask, a silkscreen, the
   board outline or the plated drill file
 - any export fails or does not produce its file
+
+Gerber file names follow File > Plot. With "Use Protel filename extensions"
+ticked they are `.gtl`, `.gbl`, ... instead of `.gbr`; the button warns about
+it and goes on when you click OK.
 
 Files are written to a `.partial` folder and renamed only when every step has
 succeeded, so a failed or cancelled run leaves no half-made release.
@@ -130,6 +136,13 @@ Outputs tab. The BOM, name, prefab-gate tab sets:
   path is used as written.
 - prefab-gate options: strict mode (cosmetic findings also block), schematic
   parity, trace current
+- Claude schematic review (off by default): when ticked, the release also
+  runs Claude Code's schematic review (see [Claude Code](#claude-code)) on
+  the staged copy and adds `<board>_schematic_review.md` to
+  `4_Documentation`. It adds a few minutes and never blocks the release on
+  its findings. It needs [Claude Code](https://claude.com/claude-code)
+  installed and signed in; if `claude` is not on `PATH` the dialog says so
+  and Release stays off.
 
 The Theme list at the bottom of the dialog switches between System, Light and
 Dark. Changing it reopens the dialog.
@@ -179,13 +192,14 @@ strict". Claude edits `<board>.release.json`, the same file the dialog
 writes.
 
 The plugin also reviews schematics: ask "review the schematic of
-path	ooard.kicad_pcb". `scripts/sch_facts.py` turns the kicad-cli netlist
+path\to\board.kicad_pcb". `scripts/sch_facts.py` turns the kicad-cli netlist
 and ERC into one summary (every part, pin and net, plus mechanical red flags
 such as floating pins), and Claude checks each IC against its datasheet:
 power pins, decoupling, straps and pull-ups, voltage levels between rails,
 connectors and ESD. It writes `<board>.schematic-review.md` with findings
 ranked likely bug, check and nit. The review is advice only: it does not edit
-the schematic or block a release.
+the schematic or block a release. The same review can run as part of every
+release from the KiCad button: tick Claude schematic review in the dialog.
 
 Update with `/plugin marketplace update fab-release`; turn off with
 `/plugin disable fab-release@fab-release`; remove with

@@ -123,6 +123,18 @@ class FakeTools:
             return done(0, "10.0.7\n")
         if any(s in line for s in self.silent):
             return done()
+        if cmd[0] == "claude":  # the review writes its report where the prompt says
+            st = Path(kw["cwd"])
+            t = release.review_report(st, next(st.glob("*.kicad_pcb")).stem)
+            t.parent.mkdir(parents=True, exist_ok=True)
+            t.write_text("# review")
+            return done(0, "0 likely bugs, 1 check, 2 nits")
+        if cmd[0] == "kicad-cli" and cmd[1] == "jobset":  # only the A4 schematic PDF
+            jobset = json.loads(Path(cmd[cmd.index("-f") + 1]).read_text())
+            t = Path(jobset["outputs"][0]["settings"]["output_path"]) / jobset["jobs"][0]["settings"]["output_filename"]
+            t.parent.mkdir(parents=True, exist_ok=True)
+            t.write_text(t.name)
+            return done()
         if cmd[0] == "kicad-cli":
             pcb_or_sch = Path(cmd[-1])
             o = release.outputs(pcb_or_sch.parent / "out", pcb_or_sch.stem)
@@ -147,6 +159,7 @@ FAB, ASM, TEST, DOC = "1_Fabrication", "2_Assembly", "3_Test", "4_Documentation"
 EXPECTED = {f"{FAB}/BRD.zip", f"{FAB}/BRD_pcbstack.txt", f"{FAB}/Required_impedance_control.xlsx",
             f"{ASM}/BRD-all-pos.csv", f"{ASM}/pcb_component_data.csv", f"{ASM}/BRD_1.41_141026_BOM.csv",
             f"{ASM}/{IBOM_HTML}", f"{ASM}/BRD_assembly_top.pdf", f"{ASM}/BRD_assembly_bottom.pdf",
+            f"{ASM}/BRD_assembly_bottom_mirrored.pdf",
             f"{TEST}/BRD-testpoints.csv",
             f"{DOC}/BRD.pdf", f"{DOC}/BRD_F.png", f"{DOC}/BRD_B.png", f"{DOC}/BRD_iso.png",
             f"{DOC}/BRD_1.41_141026.zip"}
@@ -202,6 +215,11 @@ class Gerbers(TmpCase):
 
 
 class Dialog(TmpCase):
+    def test_plugin_compiles(self):
+        # The dialog needs wx, so nothing else here imports it; at least catch syntax errors.
+        src = release.HERE / "pcm" / "plugin" / "ipc_entry.py"
+        compile(src.read_text(encoding="utf-8"), str(src), "exec")
+
     def test_groups_cover_every_output_once(self):
         keys = [k for _, ks in release.GROUPS for k in ks]
         self.assertEqual(sorted(keys), sorted(release.OUTPUTS))
@@ -460,6 +478,8 @@ class Build(TmpCase):
                     release.export_commands(Path("kicad-cli"), self.tmp, "BRD"))
         self.assertIn("--exclude-value", cmds["assembly PDF top"])
         self.assertIn("--exclude-value", cmds["assembly PDF bottom"])
+        self.assertNotIn("--mirror", cmds["assembly PDF bottom"])
+        self.assertIn("--mirror", cmds["assembly PDF bottom mirrored"])
 
     def test_isometric_render(self):
         cmds = release.export_commands(Path("kicad-cli"), self.tmp, "BRD")
@@ -492,7 +512,7 @@ class Build(TmpCase):
         self.build(pcb=hidden)
         pdfs = [c for c in self.tools.calls if c[1:4] == ["pcb", "export", "pdf"]]
         self.assertEqual([c[c.index("--layers") + 1] for c in pdfs],
-                         ["F.SilkS,F.CrtYd,Edge.Cuts", "B.SilkS,B.CrtYd,Edge.Cuts"])
+                         ["F.SilkS,F.CrtYd,Edge.Cuts"] + ["B.SilkS,B.CrtYd,Edge.Cuts"] * 2)
         self.assertTrue(all("--black-and-white" in c and c[c.index("--scale") + 1] == "0" for c in pdfs))
         copy = Path(pdfs[0][-1])
         self.assertNotEqual(copy, self.st / "BRD.kicad_pcb")  # the gate-checked board is not plotted
@@ -570,9 +590,15 @@ class Config(TmpCase):
         with self.assertRaises(Stop):
             release.load_config(self.tmp, "BRD")
 
+    def test_old_renders_tick_becomes_three(self):
+        (self.tmp / "BRD.release.json").write_text(json.dumps({"outputs": {"renders": False}}))
+        on = release.load_config(self.tmp, "BRD")["outputs"]
+        self.assertEqual((on["render_top"], on["render_bottom"], on["render_iso"]), (False, False, False))
+        self.assertFalse(on["schematic_pdf_a4"])  # off by default
+
     def test_save_round_trip(self):
         cfg = release.load_config(self.tmp, "BRD")
-        cfg["outputs"]["renders"] = False
+        cfg["outputs"]["render_iso"] = False
         cfg["folder"] = "D:/Releases"
         release.save_config(self.tmp, "BRD", cfg)
         self.assertEqual(release.load_config(self.tmp, "BRD"), cfg)
@@ -742,8 +768,15 @@ class Release(TmpCase):
         self.assertIn("nope.xlsx", str(e))
         self.assertFalse(self.rel.exists())
 
+    def test_a4_schematic_when_ticked(self):
+        self.configure(outputs={"schematic_pdf_a4": True})
+        self.go()
+        self.assertTrue((self.final / DOC / "BRD_A4.pdf").is_file())
+        self.assertTrue((self.final / DOC / "BRD.pdf").is_file())  # the plain one stays
+
     def test_only_ticked_outputs_made(self):
-        self.configure(outputs={"step": False, "renders": False, "ibom": False, "gerber": False})
+        self.configure(outputs={"step": False, "render_top": False, "render_bottom": False,
+                                "render_iso": False, "ibom": False, "gerber": False})
         self.go()
         got = {p.relative_to(self.final).as_posix() for p in self.final.rglob("*") if p.is_file()}
         skipped = {f"{DOC}/BRD_1.41_141026.zip", f"{DOC}/BRD_F.png", f"{DOC}/BRD_B.png", f"{DOC}/BRD_iso.png",
@@ -826,16 +859,48 @@ class Release(TmpCase):
         # the button's progress window counts these; they must be the lines release prints
         import contextlib
         import io
-        for outputs in ({}, {"step": False, "ibom": False, "gerber": False}):
+        for outputs, review in (({}, False), ({"step": False, "ibom": False, "gerber": False}, True)):
             with self.subTest(outputs=outputs):
                 shutil.rmtree(self.proj / "release", ignore_errors=True)
-                self.configure(outputs=outputs)
+                self.configure(outputs=outputs, claude_review=review)
                 printed = io.StringIO()
-                with contextlib.redirect_stdout(printed):
+                with contextlib.redirect_stdout(printed),                         mock.patch.object(release.shutil, "which", return_value="claude"):
                     self.go(tag=False)
                 lines = [ln.strip() for ln in printed.getvalue().splitlines() if ln.startswith("  ")]
                 cfg = release.load_config(self.proj, "BRD")
                 self.assertEqual(lines, release.planned_steps("BRD", cfg))
+
+    def review(self, tools=None, claude="claude"):
+        self.configure(claude_review=True)
+        with mock.patch.object(release.shutil, "which", return_value=claude):
+            return self.go(tools)
+
+    def test_claude_review_report_in_documentation(self):
+        self.review()
+        self.assertEqual((self.final / DOC / "BRD_schematic_review.md").read_text(), "# review")
+        self.assertTrue(self.manifest()["config"]["claude_review"])
+        (cmd,) = [c for c in self.tools.calls if c[0] == "claude"]
+        self.assertEqual(cmd[cmd.index("--allowedTools") + 1], release.REVIEW_TOOLS)
+        self.assertNotIn("Bash ", release.REVIEW_TOOLS + " ")  # never a blanket shell
+        self.assertIn("BRD.kicad_sch", cmd[2])
+        self.assertIn(str(release.HERE / "skills" / "schematic-review" / "SKILL.md"), cmd[2])
+        self.assertEqual(self.tools.calls[-2:][0][0], "claude")  # last step before the tag
+
+    def test_claude_review_off_by_default_and_needs_claude(self):
+        self.go()
+        self.assertFalse(any(c[0] == "claude" for c in self.tools.calls))
+        shutil.rmtree(self.rel)
+        with self.assertRaises(Stop) as cm:
+            self.review(claude=None)
+        self.assertEqual(cm.exception.code, 3)
+        self.assertIn("claude", str(cm.exception))
+
+    def test_claude_review_failure_publishes_nothing(self):
+        with self.assertRaises(Stop) as cm:
+            self.review(FakeTools(silent={"--allowedTools"}))
+        self.assertEqual(cm.exception.code, 5)
+        self.assertIn(release.REVIEW, str(cm.exception))
+        self.assertFalse(self.final.exists())
 
     def test_ibom_unticked_needs_no_plugin(self):
         self.configure(outputs={"ibom": False})
@@ -869,7 +934,8 @@ class Pcm(TmpCase):
                      "plugins/icon24.png", "plugins/icon48_dark.png", "plugins/icon64.png",
                      "plugins/release.py",
                      "plugins/scripts/fab_exports.py", "plugins/fab/Required_impedance_control.xlsx", "plugins/prefab_gate/prefab_gate.py",
-                     "plugins/prefab_gate/gate/kicad.py", "plugins/prefab_gate/LICENSE"):
+                     "plugins/prefab_gate/gate/kicad.py", "plugins/prefab_gate/LICENSE",
+                     "plugins/scripts/sch_facts.py", "plugins/skills/schematic-review/SKILL.md"):
             with self.subTest(name=name):
                 self.assertIn(name, self.names)
         self.assertEqual([n for n in self.names if "__pycache__" in n or n.endswith(".pyc")], [])

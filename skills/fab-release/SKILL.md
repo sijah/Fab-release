@@ -62,8 +62,9 @@ the defaults; unknown keys or wrong types refuse with exit 4.
 {
   "outputs": {"gerber": true, "position": true, "component_data": true,
               "testpoints": true, "bom": true, "ibom": true,
-              "schematic_pdf": true, "assembly_pdf": true, "step": true,
-              "renders": true},
+              "schematic_pdf": true, "schematic_pdf_a4": false,
+              "assembly_pdf": true, "step": true,
+              "render_top": true, "render_bottom": true, "render_iso": true},
   "bom_fields": "Reference,Value,Footprint,${QUANTITY},${DNP},MPN",
   "bom_labels": "Reference,Value,Footprint,Qty,DNP,MPN",
   "bom_group_by": "Value,Footprint,MPN,${DNP}",
@@ -71,7 +72,8 @@ the defaults; unknown keys or wrong types refuse with exit 4.
   "folder": "Manufacturing",
   "name": "{board}_{rev}_{date}",
   "fab_extra": "Required_impedance_control.xlsx",
-  "gate": {"strict": false, "parity": true, "ampacity": true}
+  "gate": {"strict": false, "parity": true, "ampacity": true},
+  "claude_review": false
 }
 ```
 
@@ -82,5 +84,9 @@ the defaults; unknown keys or wrong types refuse with exit 4.
   name is a file shipped with the plugin; a full path is used as written.
 - `gate.strict`: cosmetic findings block too. `parity`: schematic parity.
   `ampacity`: trace current check.
+- `claude_review`: the release also runs the schematic-review skill through
+  `claude -p` on the staged copy and puts
+  `4_Documentation/<board>_schematic_review.md` in the release. Advice only;
+  a failed review fails the step (exit 5), a missing `claude` exits 3.
 
 Test points are pads whose Fabrication property is "Test point pad".
