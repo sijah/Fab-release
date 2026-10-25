@@ -428,9 +428,9 @@ class SettingsDialog(wx.Dialog):
         except Stop as e:
             problems.append(str(e))
         gerber = self.ticks["gerber"].GetValue()
-        if gerber and self.unplotted:  # a warning only: the release's own Gerber check decides
-            problems.append(f"Not ticked in File > Plot: {', '.join(self.unplotted)}. Tick them and "
-                            "save the board, or the release stops at the Gerber check.")
+        if gerber and self.unplotted:  # a note only: the release adds them to its staged copy
+            problems.append(f"Not ticked in File > Plot: {', '.join(self.unplotted)}. The release plots "
+                            "them anyway; they stay unticked in your board.")
         if gerber and self.no_stackup:  # a warning only: the stackup file is still written, but empty
             problems.append("The board has no stackup. Set it in Board Setup > Physical Stackup and "
                             "save the board, or the stackup file will list no copper or dielectric.")

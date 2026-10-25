@@ -458,9 +458,10 @@ def step(label, cmd, expect=(), **kw):
 
 
 # What a fab needs besides every copper layer; names as in the board's (layers ...) header.
-FAB_LAYERS = ("F.Mask", "B.Mask", "F.SilkS", "B.SilkS", "Edge.Cuts")
+FAB_LAYERS = ("F.Mask", "B.Mask", "F.Paste", "B.Paste", "F.SilkS", "B.SilkS", "Edge.Cuts")
 _SIDED = {("Soldermask", "Top"): "F.Mask", ("Soldermask", "Bot"): "B.Mask",
-          ("Legend", "Top"): "F.SilkS", ("Legend", "Bot"): "B.SilkS"}
+          ("Legend", "Top"): "F.SilkS", ("Legend", "Bot"): "B.SilkS",
+          ("Paste", "Top"): "F.Paste", ("Paste", "Bot"): "B.Paste"}
 _FUNCTION = re.compile(r"TF\.FileFunction,(\w+),?(\w*),?(\w*)")
 
 
@@ -484,6 +485,20 @@ def unplotted_layers(pcb_text):
             if (n.endswith(".Cu") or n in FAB_LAYERS) and not sel >> i & 1]
 
 
+def with_fab_layers(pcb_text):
+    """The board text with every copper layer, mask, silk and the outline added to File > Plot's
+    layer selection, so a release never depends on what the Plot dialog was left at. Only ever
+    applied to the staged copy."""
+    m = re.search(r"\(layerselection 0x([0-9a-fA-F_]+)\)", pcb_text)
+    if not m:
+        return pcb_text
+    sel = int(m[1].replace("_", ""), 16)
+    for i, n in board_layers(pcb_text):
+        if n.endswith(".Cu") or n in FAB_LAYERS:
+            sel |= 1 << i
+    return pcb_text.replace(m[0], f"(layerselection 0x{sel:032x})", 1)
+
+
 def check_gerbers(fab, pcb_text):
     """Stop unless the fab files hold every copper layer of the board, both masks and silks,
     the outline and the plated drill. Read from each file's own FileFunction attribute (X2, or
@@ -503,8 +518,8 @@ def check_gerbers(fab, pcb_text):
     plated = re.search(r"\(via[\s(]|thru_hole", pcb_text)  # an SMD-only board has no plated drill file
     missing = [n for n in [*copper, *FAB_LAYERS, *(["plated drill"] if plated else [])] if n not in found]
     if missing:
-        raise Stop(5, f"Gerbers: missing {', '.join(missing)}. Tick them in File > Plot, save the "
-                      "board and release again.")
+        raise Stop(5, f"Gerbers: missing {', '.join(missing)}. kicad-cli did not write them; "
+                      "the board has no such layer or its Plot settings are damaged.")
 
 
 def _blocked(stdout):
@@ -814,6 +829,8 @@ def release(pcb, allow_dirty=False, tag=True, today=None):
     with tempfile.TemporaryDirectory(prefix="fab_release_", ignore_cleanup_errors=True) as tmp:
         st = Path(tmp)
         stage(project, st)
+        staged = st / pcb.name
+        staged.write_text(with_fab_layers(staged.read_text(encoding="utf-8-sig")), encoding="utf-8")
         verdict = run_gate(st / pcb.name, cli, cfg["gate"])
         checked = hash_inputs(st)  # after the gate's zone refill, the last write allowed
         try:

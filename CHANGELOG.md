@@ -10,6 +10,8 @@
   read-only output folder (the earlier release is no longer binned before that is
   checked), gate reasons and a capped item list, silent kills, errors inside the dialog,
   missing `.kicad_pro`, board name with a space, revs git cannot tag.
+- The release adds every copper layer, mask, paste, silk and the outline to the plot in its staged copy, so
+  nobody has to tick them in File > Plot and click Plot first; the dialog only notes it.
 - A failed Claude review no longer cancels the release (advice only, as the dialog says).
 - Fix: no false "plated drill missing" on SMD-only boards; the position file uses the
   Gerber origin only when File > Plot does; UTF-8 output so non-ASCII paths do not crash.

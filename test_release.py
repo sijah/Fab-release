@@ -28,6 +28,7 @@ def fab_files(copper=2):
     inner = [(f"In{k}_Cu", f"Copper,L{k + 1},Inr") for k in range(1, copper - 1)]
     return dict([("F_Cu", "Copper,L1,Top"), *inner, ("B_Cu", f"Copper,L{copper},Bot"),
                  ("F_Mask", "Soldermask,Top"), ("B_Mask", "Soldermask,Bot"),
+                 ("F_Paste", "Paste,Top"), ("B_Paste", "Paste,Bot"),
                  ("F_Silkscreen", "Legend,Top"), ("B_Silkscreen", "Legend,Bot"),
                  ("Edge_Cuts", "Profile,NP")])
 
@@ -196,6 +197,11 @@ class Gerbers(TmpCase):
         with self.assertRaises(Stop) as cm:
             release.check_gerbers(fab, SIX + "(via (at 0 0))")
         self.assertIn("plated drill", str(cm.exception))
+
+    def test_release_adds_unticked_fab_layers_to_the_plot(self):
+        text = release.with_fab_layers(SIX.replace("(layers", "(pcbplotparams (layerselection 0x0))(layers", 1))
+        self.assertEqual(release.unplotted_layers(text), [])
+        self.assertEqual(release.with_fab_layers("no plot params"), "no plot params")
 
     def test_smd_only_board_needs_no_plated_drill(self):
         fab = self.tmp / "fab"
