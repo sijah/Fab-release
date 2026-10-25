@@ -298,6 +298,10 @@ class SettingsDialog(wx.Dialog):
             if folder == FAB:  # the Gerber layers come from the board's File > Plot settings
                 self.copper = grey(wx.StaticText(sb, label="00 copper layers"))  # set by read_board
                 cell.Add(self.copper)
+                self.only_selected = wx.CheckBox(sb, label="Plot only layers ticked in File > Plot")
+                self.only_selected.SetValue(cfg["plot_only_selected"])
+                self.only_selected.Bind(wx.EVT_CHECKBOX, self.refresh)
+                cell.Add(self.only_selected)
             grid.Add(cell)
         page = wx.BoxSizer(wx.VERTICAL)
         page.Add(grid, 0, wx.ALL, 12)
@@ -428,9 +432,11 @@ class SettingsDialog(wx.Dialog):
         except Stop as e:
             problems.append(str(e))
         gerber = self.ticks["gerber"].GetValue()
-        if gerber and self.unplotted:  # a note only: the release adds them to its staged copy
-            problems.append(f"Not ticked in File > Plot: {', '.join(self.unplotted)}. The release plots "
-                            "them anyway; they stay unticked in your board.")
+        if gerber and self.unplotted:  # a note only, either way
+            problems.append(f"Not ticked in File > Plot: {', '.join(self.unplotted)}. "
+                            + ("Left out, as you chose: the fab may ask for them."
+                               if self.only_selected.GetValue() else
+                               "The release plots them anyway; they stay unticked in your board."))
         if gerber and self.no_stackup:  # a warning only: the stackup file is still written, but empty
             problems.append("The board has no stackup. Set it in Board Setup > Physical Stackup and "
                             "save the board, or the stackup file will list no copper or dielectric.")
@@ -510,13 +516,15 @@ class SettingsDialog(wx.Dialog):
         for key, cb in self.gate.items():
             cb.SetValue(DEFAULTS["gate"][key])
         self.claude.SetValue(DEFAULTS["claude_review"])
+        self.only_selected.SetValue(DEFAULTS["plot_only_selected"])
         self.refresh()
 
     def config(self):
         return {"outputs": {k: cb.GetValue() for k, cb in self.ticks.items()},
                 **{k: tc.GetValue().strip() for k, tc in self.texts.items()},
                 "gate": {k: cb.GetValue() for k, cb in self.gate.items()},
-                "claude_review": self.claude.GetValue()}
+                "claude_review": self.claude.GetValue(),
+                "plot_only_selected": self.only_selected.GetValue()}
 
 
 if __name__ == "__main__":

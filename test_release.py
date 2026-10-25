@@ -203,6 +203,14 @@ class Gerbers(TmpCase):
         self.assertEqual(release.unplotted_layers(text), [])
         self.assertEqual(release.with_fab_layers("no plot params"), "no plot params")
 
+    def test_only_selected_layers_leave_unticked_ones_out_without_failing(self):
+        fab = self.tmp / "fab"
+        write_gerbers(fab, "B", 2, skip=("F_Silkscreen", "B_Silkscreen"))
+        none = PCB + "(pcbplotparams (layerselection 0x0))"  # nothing ticked in File > Plot
+        with self.assertRaises(Stop):
+            release.check_gerbers(fab, none)
+        release.check_gerbers(fab, none, only_selected=True)
+
     def test_smd_only_board_needs_no_plated_drill(self):
         fab = self.tmp / "fab"
         write_gerbers(fab, "B", 6)

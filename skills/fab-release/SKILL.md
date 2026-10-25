@@ -73,7 +73,8 @@ the defaults; unknown keys or wrong types refuse with exit 4.
   "name": "{board}_{rev}_{date}",
   "fab_extra": "Required_impedance_control.xlsx",
   "gate": {"strict": false, "parity": true, "ampacity": true},
-  "claude_review": false
+  "claude_review": false,
+  "plot_only_selected": false
 }
 ```
 
@@ -87,6 +88,11 @@ the defaults; unknown keys or wrong types refuse with exit 4.
 - `claude_review`: the release also runs the schematic-review skill through
   `claude -p` on the staged copy and puts
   `4_Documentation/<board>_schematic_review.md` in the release. Advice only;
-  a failed review fails the step (exit 5), a missing `claude` exits 3.
+  a failed review (e.g. not signed in) only prints a NOTE and the release goes on;
+  a missing `claude` exits 3.
+- `plot_only_selected`: false (default) plots every layer ticked in File > Plot
+  plus all copper, masks, paste, silks and the outline. True plots exactly
+  File > Plot's selection; unticked layers are left out and the Gerber check
+  does not require them.
 
 Test points are pads whose Fabrication property is "Test point pad".

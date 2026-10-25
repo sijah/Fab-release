@@ -124,6 +124,12 @@ The dialog saves its settings beside the board as `<board>.release.json`.
 Commit this file so everyone makes the release the same way. Changes to it do
 not count as uncommitted changes.
 
+Gerber layers: every layer ticked in File > Plot, plus all copper, masks,
+paste, silkscreens and the outline, are always plotted, so File > Plot need not
+be set first. To plot exactly what File > Plot has selected, tick "Plot only
+layers ticked in File > Plot" on the Outputs tab; layers left unticked are then
+left out (the fab may ask for them).
+
 The release folder is set at the top of the dialog and the outputs on the
 Outputs tab. The BOM, name, prefab-gate tab sets:
 

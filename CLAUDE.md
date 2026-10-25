@@ -31,6 +31,9 @@ customer data.
 - Gerber layer files take their extension from File > Plot (`.gbr` or Protel
   `.gtl`...): never expect a fixed layer file name, `check_gerbers` reads the
   X2 headers. Only `-job.gbrjob` is a fixed name.
+- Gerber layers: staged copy gets copper, masks, paste, silks and outline added to its
+  plot selection (`with_fab_layers`) unless `plot_only_selected` is set; the user's board
+  is never edited.
 - Tests: `python -m unittest test_release -v` (no KiCad needed).
 - Needs PCM plugin iBOM; found under
   `<Documents>\KiCad\10.0\3rdparty\plugins` (Documents from the registry) or

@@ -189,6 +189,9 @@ DEFAULTS = {
     # Claude Code reviews the schematic against its datasheets; the report lands in
     # 4_Documentation. Advice only: findings never block. Needs `claude` on PATH.
     "claude_review": False,
+    # False: plot every layer ticked in File > Plot plus all copper, masks, paste, silks and the
+    # outline. True: plot exactly File > Plot's selection; unticked layers are simply left out.
+    "plot_only_selected": False,
 }
 
 
@@ -499,7 +502,7 @@ def with_fab_layers(pcb_text):
     return pcb_text.replace(m[0], f"(layerselection 0x{sel:032x})", 1)
 
 
-def check_gerbers(fab, pcb_text):
+def check_gerbers(fab, pcb_text, only_selected=False):
     """Stop unless the fab files hold every copper layer of the board, both masks and silks,
     the outline and the plated drill. Read from each file's own FileFunction attribute (X2, or
     X1's "G04 #@!" comment), so nothing slips through whatever File > Plot was set to."""
@@ -516,7 +519,9 @@ def check_gerbers(fab, pcb_text):
             found.add(copper[int(arg[1:]) - 1])
         found.add({"Profile": "Edge.Cuts", "Plated": "plated drill"}.get(kind) or _SIDED.get((kind, arg)))
     plated = re.search(r"\(via[\s(]|thru_hole", pcb_text)  # an SMD-only board has no plated drill file
-    missing = [n for n in [*copper, *FAB_LAYERS, *(["plated drill"] if plated else [])] if n not in found]
+    left_out = unplotted_layers(pcb_text) if only_selected else []  # the user's choice, not a failure
+    missing = [n for n in [*copper, *FAB_LAYERS, *(["plated drill"] if plated else [])]
+               if n not in found and n not in left_out]
     if missing:
         raise Stop(5, f"Gerbers: missing {', '.join(missing)}. kicad-cli did not write them; "
                       "the board has no such layer or its Plot settings are damaged.")
@@ -721,7 +726,8 @@ def build(st, partial, board, name, cli, py, plugins, cfg=DEFAULTS, claude=None)
         if on[key]:
             step(label, cmd, expect)
     if on["gerber"]:
-        check_gerbers(st / "out" / "fab", (st / f"{board}.kicad_pcb").read_text(encoding="utf-8-sig"))
+        check_gerbers(st / "out" / "fab", (st / f"{board}.kicad_pcb").read_text(encoding="utf-8-sig"),
+                      cfg["plot_only_selected"])
     if claude:  # last: minutes long, so only once everything else has passed
         try:
             step(REVIEW, review_command(claude, st, board), [review_report(st, board)], cwd=st)
@@ -830,7 +836,8 @@ def release(pcb, allow_dirty=False, tag=True, today=None):
         st = Path(tmp)
         stage(project, st)
         staged = st / pcb.name
-        staged.write_text(with_fab_layers(staged.read_text(encoding="utf-8-sig")), encoding="utf-8")
+        if not cfg["plot_only_selected"]:
+            staged.write_text(with_fab_layers(staged.read_text(encoding="utf-8-sig")), encoding="utf-8")
         verdict = run_gate(st / pcb.name, cli, cfg["gate"])
         checked = hash_inputs(st)  # after the gate's zone refill, the last write allowed
         try:
